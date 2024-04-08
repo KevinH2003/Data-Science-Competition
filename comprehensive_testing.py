@@ -6,8 +6,8 @@ from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
 from xgboost import XGBRegressor
 from sklearn.linear_model import Lasso
 from warnings import simplefilter
-from dgp import DataGenerator
-from variable_importance_scoring import importance_score, cross_validation_scores
+from variable_importance.dgp import DataGenerator
+from variable_importance.variable_importance_scoring import importance_score, cross_validation_scores
 import os
 
 RESULTS_FOLDER = "results_folder"
