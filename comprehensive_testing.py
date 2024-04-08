@@ -20,19 +20,19 @@ print("Starting...")
 
 ###Parameter Grids###
 param_grid_lasso = {
-    'alpha': [1e-2, 1e-1, 1, 10],  # A range from very small to large alpha values
-    'max_iter': [1000, 5000, 10000],  # Maximum number of iterations to converge
+    'alpha': [1e-4, 1e-3, 1e-2, 1e-1, 1, 10],  # A range from very small to large alpha values
+    'max_iter': [1000, 5000, 10000, 500000],  # Maximum number of iterations to converge
     'tol': [1e-4, 1e-3, 1e-2]  # Tolerance for the optimization
 }
 
-
+"""
 param_grid_xgb = {
     'learning_rate': [0.01, 0.05, 0.1],  # Smaller values make the model more robust.
     'n_estimators': [100, 300, 500],  # More trees can be better, but at the risk of overfitting.
     'max_depth': [3, 5, 7]
 }
+"""
 
-'''
 param_grid_xgb = {
     'learning_rate': [0.01, 0.05, 0.1],  # Smaller values make the model more robust.
     'n_estimators': [100, 500, 1000],  # More trees can be better, but at the risk of overfitting.
@@ -45,14 +45,14 @@ param_grid_xgb = {
     'reg_alpha': [0, 0.1, 0.5],  # L1 regularization term, larger values specify stronger regularization.
     'scale_pos_weight': [1]  # Use only if you have a highly imbalanced class distribution.
 }
-'''
-n_iter = 5
+
+n_iter = 50
 
 dgps = {
     "Toy_With_Noise": DataGenerator(num_cols=100, num_rows=100, num_important=10, num_interaction_terms=0, effects='constant', noise=1),
-    #"1000_Cols_Highly_Correlated": DataGenerator(num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', correlation_range=[-0.9, 0.9], noise=5),
-    #"Corn_Mimic": DataGenerator(num_cols=50000, num_rows=160, num_important=10, num_interaction_terms=500, effects='all', correlation_range=[-0.95, 0.95]),
-    #"100_Cols_50_Interaction_Terms": DataGenerator(num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', correlation_range=[-1, 1])
+    "1000_Cols_Highly_Correlated": DataGenerator(num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', correlation_range=[-0.9, 0.9], noise=5),
+    "Corn_Mimic": DataGenerator(num_cols=50000, num_rows=160, num_important=10, num_interaction_terms=500, effects='all', correlation_range=[-0.95, 0.95]),
+    "100_Cols_50_Interaction_Terms": DataGenerator(num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', correlation_range=[-1, 1])
 }
 
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
@@ -78,20 +78,20 @@ for name, dataset in datasets.items():
 
     for i in range(len(models)):
         model = models[i]
+        print(f"Scoring {model_names[i]}...")
+
         param_grid = param_grids[i]
         importance_attr = importance_attrs[i]
 
         rscv = RandomizedSearchCV(model, param_grid, scoring='r2', verbose=0, n_iter=n_iter, n_jobs=-1)
-        model_scores[model_names[i]] = (cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=dgps[name].importances, verbose=True))
+        model_scores[model_names[i]] = (cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=dgps[name].importances, verbose=False))
 
     aggregated_scores[name] = pd.DataFrame(model_scores)
 
-for name in datasets.keys():
     filename = name + "_results.csv"
     file_path = os.path.join(RESULTS_FOLDER, filename)
     
     aggregated_scores[name].to_csv(file_path, index=True)
-
     print(f"Results saved to {filename}")
 
 print("All Done!")
