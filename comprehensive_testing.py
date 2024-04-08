@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
-import sklearn
-import warnings
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from sklearn.pipeline import Pipeline
 from xgboost import XGBRegressor
 from sklearn.linear_model import Lasso
 from warnings import simplefilter
@@ -11,6 +10,7 @@ from variable_importance.variable_importance_scoring import importance_score, cr
 import os
 
 RESULTS_FOLDER = "results_folder"
+n_iter = 1
 
 # Create the folder if it doesn't exist
 if not os.path.exists(RESULTS_FOLDER):
@@ -46,13 +46,13 @@ param_grid_xgb = {
     'scale_pos_weight': [1]  # Use only if you have a highly imbalanced class distribution.
 }
 
-n_iter = 50
 
+###DGPs###
 dgps = {
     "Toy_With_Noise": DataGenerator(num_cols=100, num_rows=100, num_important=10, num_interaction_terms=0, effects='constant', noise=1),
-    "1000_Cols_Highly_Correlated": DataGenerator(num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', correlation_range=[-0.9, 0.9], noise=5),
-    "Corn_Mimic": DataGenerator(num_cols=50000, num_rows=160, num_important=10, num_interaction_terms=500, effects='all', correlation_range=[-0.95, 0.95]),
-    "100_Cols_50_Interaction_Terms": DataGenerator(num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', correlation_range=[-1, 1])
+    #"1000_Cols_Highly_Correlated": DataGenerator(num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', correlation_range=[-0.9, 0.9], noise=5),
+    #"Corn_Mimic": DataGenerator(num_cols=50000, num_rows=160, num_important=10, num_interaction_terms=500, effects='linear', correlation_range=[-0.95, 0.95]),
+    #"100_Cols_50_Interaction_Terms": DataGenerator(num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', correlation_range=[-1, 1])
 }
 
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
@@ -62,10 +62,6 @@ model_names = ["LASSO", "XGBoost"]
 models = [Lasso(), XGBRegressor()]
 param_grids= [param_grid_lasso, param_grid_xgb]
 importance_attrs = ['coef_', 'feature_importances_']
-
-simplefilter(action="ignore", category=pd.errors.PerformanceWarning)
-warnings.filterwarnings("ignore")
-warnings.filterwarnings("ignore", category=DeprecationWarning)
 
 aggregated_scores = {}
 
