@@ -4,17 +4,20 @@ import random
 import math
 
 class DataGenerator:
+    EFFECT_SCALE_RANGE = 5
+    EFFECT_EXPONENT_RANGE = 5
+
     all_functions = [
-        (lambda x, sign, c, n, i: sign * c * x),
-        (lambda x, sign, c, n, i: sign * ((c * x) ** n)),
-        (lambda x, sign, c, n, i: sign * ((c * x) ** (1/n))),
+        (lambda x, sign, c, n, i: sign * c * x * (1 / (DataGenerator.EFFECT_SCALE_RANGE))),
+        (lambda x, sign, c, n, i: sign * ((c * x) ** n) * (1 / (DataGenerator.EFFECT_SCALE_RANGE ** DataGenerator.EFFECT_EXPONENT_RANGE))),
+        (lambda x, sign, c, n, i: sign * ((c * x) ** (1/(n + 1)))),
         (lambda x, sign, c, n, i: sign * math.log(abs(c) * x + 1, n + 1)),
         (lambda x, sign, c, n, i: sign * (x and i)),
         (lambda x, sign, c, n, i: sign * (x or i)),
         (lambda x, sign, c, n, i: sign * (x ^ i))
         ]
 
-    def __init__(self, num_cols, num_rows=10, num_important=1, num_interaction_terms=None, interaction_type='all', effects=None, frequencies={}, correlation_range=[-0.9, 0.9], target='target', intercept=0, noise=0):
+    def __init__(self, num_cols=10, num_rows=10, num_important=1, num_interaction_terms=None, interaction_type='all', effects=None, frequencies={}, correlation_scale=0.9, correlation_distribution='normal', target='target', intercept=0, noise_distribution='normal', noise_scale=0, rng=None):
         # Record initialization params
         self.num_cols = num_cols
         self.num_rows = num_rows
@@ -23,23 +26,25 @@ class DataGenerator:
         self.interaction_type = interaction_type
         self.effects = effects
         self.frequencies = frequencies
-        self.correlation_range = correlation_range
+        self.correlation_scale = correlation_scale
+        self.correlation_distribution = correlation_distribution
         self.target = target
         self.intercept = intercept
-        self.noise = noise
+        self.noise_distribution = noise_distribution
+        self.noise_scale = noise_scale
 
         # Generate default parameters
-        self.rng = np.random.default_rng()
+        self.rng = np.random.default_rng() if rng is None else rng
         self.cols = range(num_cols)
         self.important_variables = self.cols[:num_important]
         self.interaction_terms = self.cols[-self.num_interaction_terms:]
 
         self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
-
+    
         for col in self.cols:
             if col not in frequencies.keys():
                 frequencies[col] = self.rng.random()
-
+        
         # Choose functions according to interaction type
         self.functions = DataGenerator.all_functions
         
@@ -93,8 +98,8 @@ class DataGenerator:
         for col in interacting_variables:
             # Generate random values
             roll = random.choice(range(len(functions)))
-            n = random.randint(1, 10)
-            c = random.randint(1, 10)
+            n = random.randint(1, DataGenerator.EFFECT_EXPONENT_RANGE)
+            c = random.randint(1, DataGenerator.EFFECT_SCALE_RANGE)
             i = random.randint(0, 1)
             sign = random.choice([-1, 1])
 
@@ -104,7 +109,7 @@ class DataGenerator:
 
         return pd.Series(interaction_list)
 
-    def generate_interactions(self, cols=None, interaction_terms=None, important_variables=None, correlation_range=None):
+    def generate_interactions(self, cols=None, interaction_terms=None, important_variables=None, scale=None, distribution=None):
         """
         Generates interaction terms for a dataset by selecting random samples of columns and creating interaction
         functions for them. This function orchestrates the creation of a comprehensive dataframe of interaction
@@ -134,20 +139,69 @@ class DataGenerator:
         cols = cols if cols is not None else self.cols
         interaction_terms = interaction_terms if interaction_terms is not None else self.interaction_terms
         important_variables = important_variables if important_variables is not None else self.important_variables
-        correlation_range = correlation_range if correlation_range is not None else self.correlation_range
+        scale = scale if scale is not None else self.correlation_scale
+        distribution = distribution if distribution is not None else self.correlation_distribution
 
         interactions = {}
+        rng = self.rng
 
         # Get random columns to interact with
         for term in interaction_terms:
-            mimicking = random.choice(important_variables)
-            correlation = random.uniform(correlation_range[0], correlation_range[1])
+            mimicking = rng.choice(important_variables)
 
+            correlation = 0
+
+            if distribution == 'uniform':
+                correlation = rng.uniform(-scale, scale)
+            elif distribution == 'normal':
+                correlation = rng.normal(scale=scale)
+            elif distribution == 'beta':
+                correlation = rng.beta(scale, scale)
+            else:
+                raise ValueError("Unsupported distribution. Choose from 'uniform' or 'normal' or 'beta'.")
+            
+            correlation = max(-1, min(1, correlation))
             interactions[term] = (mimicking, correlation)
 
         return interactions
+    
+    def generate_noise(self, size, distribution=None, scale=None):
+        """
+        Generate noise using NumPy.
 
-    def generate_data(self, num_rows=None, cols=None, frequencies=None, effects=None, interactions=None, target=None, intercept=None, noise=None):
+        Parameters:
+        - distribution: Type of distribution to generate noise from.
+                         Supported distributions: 'uniform', 'normal', 'gamma'
+                         Default is 'uniform'.
+        - scale: Scale parameter for the chosen distribution.
+                 For 'uniform', it's the range of the distribution.
+                 For 'normal', it's the standard deviation.
+                 For 'gamma', it's the shape parameter.
+                 Default is 1.0.
+
+        Returns:
+        - noise: NumPy array containing generated noise.
+        """
+
+        distribution = self.noise_distribution if distribution is None else distribution
+        scale = self.noise_scale if scale is None else scale
+
+        rng = self.rng
+
+        if scale == 0:
+            noise = np.zeros(size)  # If scale is zero, return an array of zeros
+        elif distribution == 'uniform':
+            noise = rng.uniform(-scale, scale, size=size)
+        elif distribution == 'normal':
+            noise = rng.normal(scale=scale, size=size)
+        elif distribution == 'gamma':
+            noise = rng.gamma(scale, size=size)
+        else:
+            raise ValueError("Unsupported distribution. Choose from 'uniform', 'normal', or 'gamma'.")
+
+        return noise
+
+    def generate_data(self, num_rows=None, cols=None, frequencies=None, effects=None, interactions=None, target=None, intercept=None, noise_distribution=None, noise_scale=None):
         """
         Generates a complex dataset with binary columns, interaction terms, noise, and a target variable.
         This function allows for the simulation of datasets with specified properties, including
@@ -185,7 +239,8 @@ class DataGenerator:
         interactions = interactions if interactions is not None else self.interactions
         target = target if target is not None else self.target
         intercept = intercept if intercept is not None else self.intercept
-        noise = noise if noise is not None else self.noise
+        noise_scale = noise_scale if noise_scale is not None else self.noise_scale
+        noise_distribution = noise_distribution if noise_distribution is not None else self.noise_distribution
 
         rng = self.rng
         data = {}
@@ -206,9 +261,9 @@ class DataGenerator:
                         else row[col]), 
             axis=1)
             df[col] = df[col].astype(int)
-
+            
         # Generate noise uniformly
-        noise = rng.uniform(-(noise), noise, size=df.shape[0])
+        noise = self.generate_noise(scale=noise_scale, distribution=noise_distribution, size=df.shape[0])
 
         # Calculate target variable
         important_sum = sum(df[col].apply(effects[col]) for col in df.columns if col != target)
