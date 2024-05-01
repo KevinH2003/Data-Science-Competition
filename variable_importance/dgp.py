@@ -261,6 +261,8 @@ class DataGenerator:
                         else row[col]), 
             axis=1)
             df[col] = df[col].astype(int)
+        
+        df = df.copy()
             
         # Generate noise uniformly
         noise = self.generate_noise(scale=noise_scale, distribution=noise_distribution, size=df.shape[0])

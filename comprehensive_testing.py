@@ -10,7 +10,7 @@ from variable_importance.variable_importance_scoring import importance_score, cr
 import os
 
 RESULTS_FOLDER = "results_folder"
-n_iter = 1
+n_iter = 50
 
 # Create the folder if it doesn't exist
 if not os.path.exists(RESULTS_FOLDER):
@@ -48,11 +48,25 @@ param_grid_xgb = {
 
 
 ###DGPs###
+
+
 dgps = {
-    "Toy_With_Noise": DataGenerator(num_cols=100, num_rows=100, num_important=10, num_interaction_terms=0, effects='constant', noise=1),
-    #"1000_Cols_Highly_Correlated": DataGenerator(num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', correlation_range=[-0.9, 0.9], noise=5),
-    #"Corn_Mimic": DataGenerator(num_cols=50000, num_rows=160, num_important=10, num_interaction_terms=500, effects='linear', correlation_range=[-0.95, 0.95]),
-    #"100_Cols_50_Interaction_Terms": DataGenerator(num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', correlation_range=[-1, 1])
+    "Toy_With_Noise": DataGenerator(
+        num_cols=100, num_rows=100, num_important=10, 
+        num_interaction_terms=0, effects='constant', 
+        noise_distribution='normal', noise_scale=1),
+    "1000_Cols_Highly_Correlated": DataGenerator(
+        num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', 
+        correlation_scale=1, correlation_distribution='normal', 
+        intercept=0, noise_distribution='normal', noise_scale=1),
+    "Corn_Mimic": DataGenerator(
+        num_cols=50000, num_rows=160, num_important=10, num_interaction_terms=5000, effects='all', 
+        correlation_scale=1, correlation_distribution='normal', 
+        intercept=10, noise_distribution='normal', noise_scale=1),
+    "100_Cols_50_Interaction_Terms": DataGenerator(
+        num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', 
+        correlation_scale=0.9, correlation_distribution='uniform', 
+        intercept=10, noise_distribution='normal', noise_scale=2)
 }
 
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
