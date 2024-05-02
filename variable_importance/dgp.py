@@ -17,13 +17,14 @@ class DataGenerator:
         (lambda x, sign, c, n, i: sign * (x ^ i))
         ]
 
-    def __init__(self, num_cols=10, num_rows=10, num_important=1, num_interaction_terms=None, interaction_type='all', effects=None, frequencies={}, correlation_scale=0.9, correlation_distribution='normal', target='target', intercept=0, noise_distribution='normal', noise_scale=0, rng=None):
+    def __init__(self, num_cols=10, num_rows=10, num_important=1, num_interaction_terms=None, interaction_type='all', importance_ranking="quick", effects=None, frequencies={}, correlation_scale=0.9, correlation_distribution='normal', target='target', intercept=0, noise_distribution='normal', noise_scale=0, rng=None):
         # Record initialization params
         self.num_cols = num_cols
         self.num_rows = num_rows
         self.num_important = num_important
         self.num_interaction_terms = num_interaction_terms if num_interaction_terms is not None else self.num_important
         self.interaction_type = interaction_type
+        self.importance_ranking = importance_ranking
         self.effects = effects
         self.frequencies = frequencies
         self.correlation_scale = correlation_scale
@@ -38,8 +39,6 @@ class DataGenerator:
         self.cols = range(num_cols)
         self.important_variables = self.cols[:num_important]
         self.interaction_terms = self.cols[-self.num_interaction_terms:]
-
-        self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
     
         for col in self.cols:
             if col not in frequencies.keys():
@@ -68,6 +67,14 @@ class DataGenerator:
         # If effects wasn't a listlike structure, generate effects according to specifications
         if self.effects is None or type(self.effects) == str:
             self.effects = self.random_interaction(self.important_variables, functions=self.target_functions)
+
+        self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
+        self.bucket_importances = {}
+
+        if importance_ranking == 'constant':
+            self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
+        elif importance_ranking == 'quick':
+            self.importances = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
     
     def random_interaction(self, interacting_variables, cols=None, functions=None):
         """
@@ -249,7 +256,7 @@ class DataGenerator:
         for col in cols:
             freq = frequencies[col]
             data[col] = rng.choice([0, 1], size=num_rows, p=[1-freq, freq])
-
+            
         df = pd.DataFrame(data)
 
         # Generate interactions

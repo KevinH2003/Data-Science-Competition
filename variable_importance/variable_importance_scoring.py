@@ -36,14 +36,27 @@ def cross_validation_scores(cv, X, y, test_size=0.2, importance_attr='feature_im
     # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
-    cv.fit(X_train, y_train)
+    failed = False
+    try:
+        cv.fit(X_train, y_train)
+    except Exception as e:
+        #warnings.warn("something bad happened", UserWarning)
+        scores['model'] = None
+        scores['params'] = None
+        scores['training_r2'] = None
+        scores['test_r2'] = None
+        scores['importance_score'] = None
 
+        failed = True
+    finally:
+        if failed:
+            return scores
+    
     best_model = cv.best_estimator_
     scores['model'] = best_model
     scores['params'] = cv.best_params_
 
     # Calculate predictions for the training set and the test set
-    best_model.fit(X_train, y_train)
     y_train_pred = best_model.predict(X_train)
     y_test_pred = best_model.predict(X_test)
 
