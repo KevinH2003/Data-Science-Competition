@@ -6,6 +6,7 @@ from xgboost import XGBRegressor
 from sklearn.linear_model import Lasso
 from warnings import simplefilter
 from variable_importance.dgp import DataGenerator
+from variable_importance.fastsparsewrap import FastSparseSklearn
 from variable_importance.variable_importance_scoring import importance_score, cross_validation_scores
 from variable_importance.pipelining import VI_Pipeline, FeatureSelector
 import os
@@ -62,6 +63,22 @@ param_grid_lasso_xgb = {
     'prediction__reg_alpha': [0, 0.1, 0.5],  # L1 regularization term, larger values specify stronger regularization.
 }
 
+param_grid_fastsparse_xgb = {
+    "feature_trimming__estimator__max_support_size": [5, 10, 15, 20, 25],
+    "feature_trimming__estimator__tol": [1e-9, 1e-8, 1e-7, 1e-6],
+    "feature_trimming__estimator__lambda_0": [0.001, 0.005, 0.01, 0.05, 0.1],
+
+    'prediction__learning_rate': [0.01, 0.05, 0.1],  # Smaller values make the model more robust.
+    'prediction__n_estimators': [100, 300, 500],  # More trees can be better, but at the risk of overfitting.
+    'prediction__max_depth': [3, 5, 7],  # Depths greater than 10 might lead to overfitting.
+    'prediction__min_child_weight': [1, 3, 5, 7],  # Controls over-fitting. Higher values prevent a model from learning relations which might be highly specific to the particular sample selected for a tree.
+    'prediction__gamma': [0.1, 0.2, 0.3],  # Larger values make the algorithm more conservative.
+    'prediction__subsample': [0.8, 1.0],  # Values lower than 0.6 might lead to under-fitting.
+    'prediction__colsample_bytree': [0.6, 0.8, 1.0],  # Considering a subset of features for each tree might make the model more robust.
+    'prediction__reg_lambda': [1, 1.5, 2],  # L2 regularization term.
+    'prediction__reg_alpha': [0, 0.1, 0.5],  # L1 regularization term, larger values specify stronger regularization.
+}
+
 
 ###DGPs###
 
@@ -101,10 +118,15 @@ pipeline_lasso_xgb = VI_Pipeline(steps=[
     ('prediction', XGBRegressor())
 ], prediction_step=True, vi_step="prediction")
 
-model_names = ["LASSO", "XGBoost", "LASSO + XGBoost"]
-models = [Lasso(), XGBRegressor(), pipeline_lasso_xgb]
-param_grids= [param_grid_lasso, param_grid_xgb, param_grid_lasso_xgb]
-importance_attrs = ['coef_', 'feature_importances_', 'feature_importances_']
+pipeline_fastsparse_xgb = VI_Pipeline(steps=[
+    ('feature_trimming', FeatureSelector(FastSparseSklearn())),
+    ('prediction', XGBRegressor())
+], prediction_step=True, vi_step="prediction")
+
+model_names = ["LASSO", "XGBoost", "LASSO + XGBoost", "FastSparse + XGBoost"]
+models = [Lasso(), XGBRegressor(), pipeline_lasso_xgb, pipeline_fastsparse_xgb]
+param_grids= [param_grid_lasso, param_grid_xgb, param_grid_lasso_xgb, param_grid_fastsparse_xgb]
+importance_attrs = ['coef_', 'feature_importances_', 'feature_importances_', 'feature_importances_']
 
 aggregated_scores = {}
 
