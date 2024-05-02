@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import fastsparsegams
+from sklearn.base import BaseEstimator, TransformerMixin
 
 class FastSparseSklearn(BaseEstimator, TransformerMixin):
     def __init__(self, max_support_size, tol=1e-8, lambda_0=0.025, gamma=0):
