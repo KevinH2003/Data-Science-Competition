@@ -2,5 +2,4 @@ TestFiles/
 results_folder/
 __pycache__/
 variable_importance/__pycache__
-cmr.py
 rashomonwrap.py

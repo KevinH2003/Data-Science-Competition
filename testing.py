@@ -21,7 +21,7 @@ if not os.path.exists(RESULTS_FOLDER):
 print("Starting...")
 
 dgps = {
-    "Toy": DataGenerator(num_cols=100, num_rows=100, num_important=10, num_interaction_terms=0, effects='constant', noise=1),
+    "Toy": DataGenerator(num_cols=100, num_rows=100, num_important=10, num_interaction_terms=0, effects='constant'),
 }
 
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
@@ -34,11 +34,15 @@ pipeline_param_grid = []
 #pipeline = 
 
 model_names = ["Pipeline"]
-models = []
-param_grids= [pipeline_param_grid]
-importance_attrs = ['']
+models = [Lasso()]
+param_grids= [{'alpha': [1, 0.1, 0.01]}]
+importance_attrs = ['coef_']
+
+scoring_function_names = ['model_importance', 'cmr_importance']
+
 
 aggregated_scores = {}
+
 
 for name, dataset in datasets.items():
     print(f"{name}:")
@@ -55,7 +59,7 @@ for name, dataset in datasets.items():
         importance_attr = importance_attrs[i]
 
         rscv = RandomizedSearchCV(model, param_grid, scoring='r2', verbose=0, n_iter=n_iter, n_jobs=-1)
-        model_scores[model_names[i]] = (cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=dgps[name].importances, verbose=False))
+        model_scores[model_names[i]] = (cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=dgps[name].importances, verbose=True, score_function_names=scoring_function_names))
 
     aggregated_scores[name] = pd.DataFrame(model_scores)
 
