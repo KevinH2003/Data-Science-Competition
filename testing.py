@@ -38,7 +38,7 @@ models = [Lasso()]
 param_grids= [{'alpha': [1, 0.1, 0.01]}]
 importance_attrs = ['coef_']
 
-scoring_function_names = ['model_importance', 'cmr_importance']
+scoring_function_names = ['model_importance', 'shap_importance', 'cmr_importance', 'mr_importance', 'loco_importance']
 
 
 aggregated_scores = {}

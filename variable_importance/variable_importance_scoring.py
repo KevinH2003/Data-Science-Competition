@@ -2,6 +2,10 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score, mean_squared_error
 from scipy.stats import spearmanr
 from variable_importance.cmr import CMR
+from variable_importance.loco import LOCOImportance
+from variable_importance.mr import MRImportance
+import numpy as np
+import shap
 import warnings
 
 def importance_score_estimator(estimator, X, y, true_importances=[], importance_attr='feature_importances_', score=spearmanr):
@@ -73,8 +77,18 @@ def cross_validation_scores(cv, X, y, test_size=0.2, importance_attr='feature_im
         elif name == 'cmr_importance':
             cmr = CMR(X_train, y_train, mean_squared_error, best_model)
             imp = cmr.importance_all()
-
             scores[name] = importance_score(imp, true_importances)
+        elif name == 'loco_importance':
+            loco = LOCOImportance(X_train, y_train, 'r2', best_model, cv=5)
+            scores[name] = importance_score(loco.get_importance(), true_importances)
+        elif name == 'mr_importance':
+            mr = MRImportance(X_train, y_train, 'r2', best_model)
+            scores[name] = importance_score(mr.get_importance(), true_importances)
+        elif name == 'shap_importance':
+            explainer = shap.Explainer(best_model, X_train)
+            shap_values = explainer.shap_values(X_train)
+            shap_avg = np.average(np.abs(shap_values), axis=0)
+            scores[name] = importance_score(shap_avg, true_importances)
 
             
     if verbose:

@@ -1,88 +1,134 @@
-from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score, mean_squared_error
-from scipy.stats import spearmanr
-from variable_importance.cmr import CMR
-import warnings
+# Akshar Yeccherla, 2024
 
-def importance_score_estimator(estimator, X, y, true_importances=[], importance_attr='feature_importances_', score=spearmanr):
-    warnings.filterwarnings("error")
-    estimator.fit(X, y)
-    try:
-        pred_importances = getattr(estimator, importance_attr)
-        correlation, _ = score(true_importances, pred_importances)
-    except:
-        correlation = 0
-    finally:
-        return correlation
-
-def importance_score(pred_importances, true_importances=[], score=spearmanr):
-    warnings.filterwarnings("error")
-    try:
-        correlation, _ = score(true_importances, pred_importances)
-    except Exception as e:
-        print(e)
-        correlation = 0
-    finally:
-        return correlation
-
-def model_importance_score(model, true_importances, importance_attr, score=spearmanr):
-    pred_importances = list(getattr(model, importance_attr))
-    return importance_score(pred_importances, true_importances=true_importances, score=score)
+from sklearn.model_selection import GridSearchCV, RandomizedSearchCV
+from xgboost import XGBClassifier
+import numpy as np
+import pandas as pd
 
 
-def cross_validation_scores(cv, X, y, test_size=0.2, importance_attr='feature_importances_', true_importances=[], score_function_names=['model_importance'], verbose=False):
-    '''
-    Present an initialized cross-validator such as GridSearchCV or RandomizedSearchCV
-    '''
-    scores = {}
-    # Split the data into training and testing sets
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
+class CMR:
+    """
+    Conditional Model Reliance
+    Given an imputation model, imputation cross-validation scheme, and cross-validated
+    prediction model, calculates the feature importances.
 
-    failed = False
-    try:
-        cv.fit(X_train, y_train)
-    except Exception as e:
-        #warnings.warn("something bad happened", UserWarning)
-        scores['model'] = None
-        scores['params'] = None
-        scores['training_r2'] = None
-        scores['test_r2'] = None
-        for name in score_function_names:
-            scores[name] = None
-
-        failed = True
-    finally:
-        if failed:
-            return scores
+    Parameters
+    ----------
+    data: data
+    labels: labels
+    scoring: string or callable
+        Same as scoring in sklearn API, regression or classification error
+    model: model (sklearn API), optional
+        Cross-validated model
+    imp_model:
+    imp_fit_params : dict, optional
+        fit parameters for imputation model
+    imp_cv: int or iterable
+        Same as cv in sklearn API
+    scramble_method: string, optional
+      method for scramble of unique info
+    n_jobs: int, optional
+        Number of jobs for parallel computation
+        
+    TODO
+    -----------
+    support categorical and continuous variables
+    speed up
+    support parallelization (n_jobs)
+    """
     
-    best_model = cv.best_estimator_
-    scores['model'] = best_model
-    scores['params'] = cv.best_params_
+    def __init__(self, data, labels, scoring, model, imp_model=XGBClassifier(), cv_imputation=False, imp_fit_params=None, imp_cv=5, scramble_method="pairs", n_jobs=None):
+      self.data = data.to_numpy() if not isinstance(data, np.ndarray) else data
+      self.labels = labels.to_numpy() if not isinstance(labels, np.ndarray) else labels
+      
+      self.model = model
+      self.scoring = scoring
 
-    # Calculate predictions for the training set and the test set
-    y_train_pred = best_model.predict(X_train)
-    y_test_pred = best_model.predict(X_test)
+      self.imp_model = imp_model
+      self.imp_fit_params = imp_fit_params if imp_fit_params else dict()
+      self.imp_cv = imp_cv
+      self.n_jobs = n_jobs
+      self.cv_imputation = cv_imputation
 
-    # Training and test R^2 score
-    scores['training_r2'] = r2_score(y_train, y_train_pred)
-    scores['test_r2'] = r2_score(y_test, y_test_pred)
+      self.num_observations = np.shape(self.data)[0]
+      self.num_features = np.shape(self.data)[1]
+      
+      self.baseline_score = self.base_score()
+    
+    def imputation_model_cv(self, data, labels):
+      if not self.cv_imputation:
+        self.imp_model.fit(data, labels)
+        return self.imp_model
+      
+      gs_cv = RandomizedSearchCV(self.imp_model, param_grid=self.imp_fit_params, cv=self.imp_cv)
+      gs_cv.fit(data, labels)
+      
+      best_model = gs_cv.best_estimator_
+      best_model.fit(data, labels)
+      
+      return best_model
+    
+    def base_score(self):
+      y_pred = self.model.predict(self.data)
+      return self.scoring(self.labels, y_pred)
+          
+    def feature_importance(self, feature):
+      feature_mask = [i for i in range(self.num_features) if i != feature]
+      data = self.data[:, feature_mask]
+      feature_col = self.data[:, feature]
+      
+      imputation_model = self.imputation_model_cv(data, feature_col)
+      
+      feature_pred = imputation_model.predict_proba(data)[:,1]
 
-    for name in score_function_names:
-        if name == 'model_importance':
-            scores[name] = model_importance_score(best_model, true_importances, importance_attr)
-        elif name == 'cmr_importance':
-            cmr = CMR(X_train, y_train, mean_squared_error, best_model)
-            imp = cmr.importance_all()
+      feature_unique, feature_impute = self.feature_unique_info(feature_col, feature_pred)
+      
+      scrambled_score = 0.0
+      
+      for j in range(self.num_observations):
+        data_row = np.copy(self.data[j,:])
+        data_label = self.labels[j]
+        swap_preds = []
+        for i in range(self.num_observations):
+          if i == j: 
+            continue
+          
+          feature_ij = feature_unique[i] + feature_impute[j]
+          feature_ij = min(1, max(feature_ij, 0))
+          
+          data_row[feature] = feature_ij
+          
+          swap_preds.append(self.model.predict([data_row]))
+          
+        scrambled_score += self.scoring(swap_preds, np.full(self.num_observations-1, data_label))
+                
+      scrambled_score = scrambled_score / (self.num_observations)      
+      importance = scrambled_score / self.baseline_score
+      
+      return importance
+      
+    def feature_unique_info(self, feature, feature_pred):
+      shape = np.shape(feature_pred)
+      rand_num = np.random.rand(shape[0])
+      
+      result = feature_pred - rand_num
+      result[result <= 0] = 0
+      result[result > 0] = 1
+      
+      feature_unique = feature - result
+      
+      return feature_unique, result
+    
+    def importance_all(self, mode="array"):
+      if mode == "list":
+        importance_list = []
+        for i in range(self.num_features):
+          importance_list.append((i, self.feature_importance(i)))
+        return sorted(importance_list, key=lambda x:(-x[1],x[0]))
+      
+      importance_list = []
+      for i in range(self.num_features):
+        importance_list.append(self.feature_importance(i))
+        
+      return importance_list
 
-            scores[name] = importance_score(imp, true_importances)
-
-            
-    if verbose:
-        print(f"Scores For {best_model.__class__}")
-        print(f"Training R^2 Score: {scores['training_r2']}")
-        print(f"Test R^2 Score: {scores['test_r2']}")
-        print("Importance Scores:")
-        for name in score_function_names:
-            print(f"{name}: {scores[name]}")
-
-    return scores

@@ -3,3 +3,4 @@ results_folder/
 __pycache__/
 variable_importance/__pycache__
 rashomonwrap.py
+quick_test.ipynb
