@@ -108,16 +108,20 @@ class CMR:
       return importance
       
     def feature_unique_info(self, feature, feature_pred):
-      shape = np.shape(feature_pred)
-      rand_num = np.random.rand(shape[0])
+      # shape = np.shape(feature_pred)
+      # rand_num = np.random.rand(shape[0])
       
-      result = feature_pred - rand_num
-      result[result <= 0] = 0
-      result[result > 0] = 1
+      # result = feature_pred - rand_num
+      # result[result <= 0] = 0
+      # result[result > 0] = 1
       
-      feature_unique = feature - result
+      # feature_unique = feature - result
       
-      return feature_unique, result
+      # return feature_unique, result
+
+      feature_unique = feature - feature_pred
+      
+      return feature_unique, feature_pred
     
     def importance_all(self, mode="array"):
       if mode == "list":

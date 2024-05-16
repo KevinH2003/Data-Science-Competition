@@ -23,14 +23,20 @@ def importance_score(pred_importances, true_importances=[], score=spearmanr):
     warnings.filterwarnings("error")
     try:
         correlation, _ = score(true_importances, pred_importances)
+        pred_linked = [(i, pred_importances[i]) for i in range(len(pred_importances))]
+        pred_linked = sorted(pred_linked, key=lambda x: -x[1])
+        ranks = [(pred_linked[i][0], i+1) for i in range(len(pred_linked))]
+        ranks = sorted(ranks, key=lambda x: x[0])
+        ranks = [val[1] for val in ranks]
     except Exception as e:
         print(e)
         correlation = 0
+        ranks = []
     finally:
-        return correlation
+        return correlation, ranks
 
 def model_importance_score(model, true_importances, importance_attr, score=spearmanr):
-    pred_importances = list(getattr(model, importance_attr))
+    pred_importances = list(getattr(model, importance_attr))  
     return importance_score(pred_importances, true_importances=true_importances, score=score)
 
 
@@ -39,6 +45,8 @@ def cross_validation_scores(cv, X, y, test_size=0.2, importance_attr='feature_im
     Present an initialized cross-validator such as GridSearchCV or RandomizedSearchCV
     '''
     scores = {}
+    names = X.columns
+    ranks = {'features': names}
     # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
@@ -73,22 +81,22 @@ def cross_validation_scores(cv, X, y, test_size=0.2, importance_attr='feature_im
 
     for name in score_function_names:
         if name == 'model_importance':
-            scores[name] = model_importance_score(best_model, true_importances, importance_attr)
+            scores[name], ranks[name] = model_importance_score(best_model, true_importances, importance_attr)
         elif name == 'cmr_importance':
             cmr = CMR(X_train, y_train, mean_squared_error, best_model)
             imp = cmr.importance_all()
-            scores[name] = importance_score(imp, true_importances)
+            scores[name], ranks[name] = importance_score(imp, true_importances)
         elif name == 'loco_importance':
             loco = LOCOImportance(X_train, y_train, 'r2', best_model, cv=5)
-            scores[name] = importance_score(loco.get_importance(), true_importances)
+            scores[name], ranks[name] = importance_score(loco.get_importance(), true_importances)
         elif name == 'mr_importance':
             mr = MRImportance(X_train, y_train, 'r2', best_model)
-            scores[name] = importance_score(mr.get_importance(), true_importances)
+            scores[name], ranks[name] = importance_score(mr.get_importance(), true_importances)
         elif name == 'shap_importance':
             explainer = shap.Explainer(best_model, X_train)
             shap_values = explainer.shap_values(X_train)
             shap_avg = np.average(np.abs(shap_values), axis=0)
-            scores[name] = importance_score(shap_avg, true_importances)
+            scores[name], ranks[name] = importance_score(shap_avg, true_importances)
 
             
     if verbose:
@@ -99,4 +107,4 @@ def cross_validation_scores(cv, X, y, test_size=0.2, importance_attr='feature_im
         for name in score_function_names:
             print(f"{name}: {scores[name]}")
 
-    return scores
+    return scores, ranks

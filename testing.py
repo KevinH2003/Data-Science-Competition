@@ -50,6 +50,7 @@ for name, dataset in datasets.items():
     y = dataset["target"]
 
     model_scores = {}
+    rank_scores = {}
 
     for i in range(len(models)):
         model = models[i]
@@ -59,7 +60,16 @@ for name, dataset in datasets.items():
         importance_attr = importance_attrs[i]
 
         rscv = RandomizedSearchCV(model, param_grid, scoring='r2', verbose=0, n_iter=n_iter, n_jobs=-1)
-        model_scores[model_names[i]] = (cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=dgps[name].importances, verbose=True, score_function_names=scoring_function_names))
+        model_scores[model_names[i]], rank_scores = cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=dgps[name].importances, verbose=True, score_function_names=scoring_function_names)
+
+        rank_scores_df = pd.DataFrame(rank_scores)
+        rank_scores_df['average'] = rank_scores_df.loc[:, rank_scores_df.columns != 'features'].mean(axis=1)
+        rank_scores_df = rank_scores_df.sort_values(by=['average'])
+
+        filename = name + "_" + model_names[i] + "_ranks.csv"
+        file_path = os.path.join(RESULTS_FOLDER, filename)
+        
+        rank_scores_df.to_csv(file_path, index=False)
 
     aggregated_scores[name] = pd.DataFrame(model_scores)
 
