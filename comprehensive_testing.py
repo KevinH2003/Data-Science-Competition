@@ -14,12 +14,10 @@ import os
 
 PROTOTYPING = True
 RESULTS_FOLDER = "results_folder"
-n_iter = 100
 num_folds = 3
 nrows=None
 
 if PROTOTYPING:
-    n_iter = 100
     num_folds = 3
     nrows= None
 
@@ -59,39 +57,6 @@ param_grid_xgb = {
     'reg_alpha': [0, 0.1, 0.5, 1],  # L1 regularization term, larger values specify stronger regularization.
 }
 
-param_grid_lasso_xgb = {
-    'feature_trimming__estimator__alpha': [1e-3, 5e-3, 1e-2, 5e-2, 1e-1, 5e-1, 1, 5, 10, 50, 100],  # A range from very small to large alpha values
-    'feature_trimming__estimator__max_iter': [1000, 2500, 5000, 10000, 25000, 500000],  # Maximum number of iterations to converge
-    'feature_trimming__estimator__tol': [1e-4, 1e-3, 1e-2],  # Tolerance for the optimization
-
-    'prediction__learning_rate': [0.01, 0.05, 0.1],  # Smaller values make the model more robust.
-    'prediction__n_estimators': [100, 300, 500],  # More trees can be better, but at the risk of overfitting.
-    'prediction__max_depth': [3, 5, 7],  # Depths greater than 10 might lead to overfitting.
-    'prediction__min_child_weight': [1, 3, 5, 7],  # Controls over-fitting. Higher values prevent a model from learning relations which might be highly specific to the particular sample selected for a tree.
-    'prediction__gamma': [0.1, 0.2, 0.3],  # Larger values make the algorithm more conservative.
-    'prediction__subsample': [0.8, 1.0],  # Values lower than 0.6 might lead to under-fitting.
-    'prediction__colsample_bytree': [0.6, 0.8, 1.0],  # Considering a subset of features for each tree might make the model more robust.
-    'prediction__reg_lambda': [1, 1.5, 2],  # L2 regularization term.
-    'prediction__reg_alpha': [0, 0.1, 0.5, 1],  # L1 regularization term, larger values specify stronger regularization.
-}
-
-param_grid_fastsparse_xgb = {
-    "feature_trimming__estimator__max_support_size": [5, 10, 15, 20, 25],
-    "feature_trimming__estimator__atol": [1e-9, 1e-8, 1e-7, 1e-6],
-    "feature_trimming__estimator__lambda_0": [0.001, 0.005, 0.01, 0.05, 0.1],
-    "feature_trimming__estimator__penalty": ["L0"],
-
-    'prediction__learning_rate': [0.01, 0.05, 0.1],  # Smaller values make the model more robust.
-    'prediction__n_estimators': [100, 300, 500],  # More trees can be better, but at the risk of overfitting.
-    'prediction__max_depth': [3, 5, 7],  # Depths greater than 10 might lead to overfitting.
-    'prediction__min_child_weight': [1, 3, 5, 7],  # Controls over-fitting. Higher values prevent a model from learning relations which might be highly specific to the particular sample selected for a tree.
-    'prediction__gamma': [0.1, 0.2, 0.3],  # Larger values make the algorithm more conservative.
-    'prediction__subsample': [0.8, 1.0],  # Values lower than 0.6 might lead to under-fitting.
-    'prediction__colsample_bytree': [0.6, 0.8, 1.0],  # Considering a subset of features for each tree might make the model more robust.
-    'prediction__reg_lambda': [1, 1.5, 2],  # L2 regularization term.
-    'prediction__reg_alpha': [0, 0.1, 0.5, 1],  # L1 regularization term, larger values specify stronger regularization.
-}
-
 param_grid_xgb_pipeline = {
     'prediction__learning_rate': [0.01, 0.05, 0.1],  # Smaller values make the model more robust.
     'prediction__n_estimators': [100, 300, 500],  # More trees can be better, but at the risk of overfitting.
@@ -123,18 +88,30 @@ small_dataset_importances = small_test_SNP_metadata_df["EffectSize"]
 ###DGPs###
 
 dgps = {
-    "Toy_With_Noise": DataGenerator(
+    "Toy": DataGenerator(
         num_cols=100, num_rows=100, num_important=10, 
         num_interaction_terms=0, effects='linear', 
         noise_distribution='normal', noise_scale=0.1),
-    "1000_Cols_Highly_Correlated": DataGenerator(
-        num_cols=1000, num_rows=100, num_important=10, num_interaction_terms=50, effects='linear', 
+    "Slightly More Challening": DataGenerator(
+        num_cols=100, num_rows=100, num_important=10, num_interaction_terms=20, effects='all', 
+        correlation_scale=1.5, correlation_distribution='normal', 
+        intercept=10, noise_distribution='normal', noise_scale=0.3),
+    "High_Dimensionality": DataGenerator(
+        num_cols=10000, num_rows=100, num_important=10, num_interaction_terms=20, effects='all', 
         correlation_scale=1, correlation_distribution='normal', 
         intercept=0, noise_distribution='normal', noise_scale=0.1),
-    "100_Cols_50_Interaction_Terms": DataGenerator(
-        num_cols=100, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', 
-        correlation_scale=0.9, correlation_distribution='uniform', 
-        intercept=10, noise_distribution='normal', noise_scale=0.1)
+    "High_Correlation": DataGenerator(
+        num_cols=1000, num_rows=1000, num_important=10, num_interaction_terms=200, effects='all', 
+        correlation_scale=0.95, correlation_distribution='uniform', 
+        intercept=0, noise_distribution='normal', noise_scale=0.1),
+    "High_Noise": DataGenerator(
+        num_cols=1000, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', 
+        correlation_scale=1, correlation_distribution='normal', 
+        intercept=0, noise_distribution='uniform', noise_scale=0.5),
+    "All Three": DataGenerator(
+        num_cols=10000, num_rows=100, num_important=10, num_interaction_terms=200, effects='all', 
+        correlation_scale=0.95, correlation_distribution='uniform', 
+        intercept=0, noise_distribution='uniform', noise_scale=0.5),
 }
 
 if PROTOTYPING:
@@ -148,21 +125,23 @@ if PROTOTYPING:
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
 true_importances = {name: dgps[name].bucket_importances for name in dgps.keys()}
 
+'''
 if not PROTOTYPING:
     datasets["Small_Avalo"] = small_input_df
     #datasets["Large_Avalo"] = large_input_df
 
     true_importances["Small_Avalo"] = {"constant": small_dataset_importances}
     #true_importances["Large_Avalo"] = large_dataset_importances
-
+'''
 print("Datasets Generated...")
 
-model_names = ["LASSO", "FastSparse", "XGBoost"]
+model_names = ["LASSO", "FastSparse"]
 models = {"LASSO": Lasso(), "FastSparse": FastSparseSklearn(), "XGBoost": XGBRegressor()}
 param_grids = {"LASSO": param_grid_lasso, "FastSparse": param_grid_fastsparse, "XGBoost": param_grid_xgb}
 importance_attrs = {"LASSO": 'coef_', "FastSparse": 'coef_', "XGBoost": 'feature_importances_'}
+n_iters= {"LASSO": 300, "FastSparse": 100, "XGBoost": 1000}
 
-trimming_steps = {"LASSO": lambda params: Lasso(**params), "FastSparse": lambda params: FastSparseSklearn(**params)}
+trimming_steps = {"LASSO": lambda params: Lasso(**params) if params is not None else Lasso(), "FastSparse": lambda params: FastSparseSklearn(**params) if params is not None else FastSparseSklearn()}
 slow_predictors = {"XGBoost": lambda: XGBRegressor()}
 
 if PROTOTYPING:
@@ -199,7 +178,7 @@ for name, dataset in datasets.items():
         param_grid = param_grids[model_name]
         importance_attr = importance_attrs[model_name]
 
-        rscv = RandomizedSearchCV(model, param_grid, cv=num_folds, scoring='r2', verbose=0, n_iter=n_iter, n_jobs=-1)
+        rscv = RandomizedSearchCV(model, param_grid, cv=num_folds, scoring='r2', verbose=0, n_iter=n_iters[model_name], n_jobs=-1)
         
         model_scores[model_name] = (cross_validation_scores(rscv, X, y, importance_attr=importance_attr, true_importances=true_importances[name], verbose=True))
 
@@ -219,6 +198,7 @@ for name, dataset in datasets.items():
                 models[pipeline_name] = new_pipeline
                 param_grids[pipeline_name] = param_grids[predictor_name + "_Pipeline"]
                 importance_attrs[pipeline_name] = 'feature_importances_'
+                n_iters[pipeline_name] = n_iters[predictor_name]
         
     aggregated_scores[name] = pd.DataFrame(model_scores)
 

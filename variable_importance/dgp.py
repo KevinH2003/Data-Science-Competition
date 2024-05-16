@@ -242,6 +242,11 @@ class DataGenerator:
         return noise
     
     def predict(self, X, effects=None, target=None):
+        if not isinstance(X, pd.DataFrame):
+            X = pd.DataFrame(X)
+
+        X = X.astype(int)
+
         effects = effects if effects is not None else self.effects
         target = target if target is not None else self.target
 
