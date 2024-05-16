@@ -2,7 +2,6 @@ from sklearn.pipeline import Pipeline
 from sklearn.feature_selection import SelectFromModel
 import numpy as np
 
-
 class FeatureSelector(SelectFromModel):
     def __init__(self, estimator, threshold=None, prefit=False, norm_order=1, max_features=None, importance_getter='auto'):
         super().__init__(estimator, threshold=threshold, prefit=prefit, norm_order=norm_order, max_features=max_features, importance_getter=importance_getter)

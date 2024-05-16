@@ -17,13 +17,31 @@ class DataGenerator:
         (lambda x, sign, c, n, i: sign * (x ^ i))
         ]
 
-    def __init__(self, num_cols=10, num_rows=10, num_important=1, num_interaction_terms=None, interaction_type='all', importance_ranking="quick", effects=None, frequencies={}, correlation_scale=0.9, correlation_distribution='normal', target='target', intercept=0, noise_distribution='normal', noise_scale=0, rng=None):
+    def __init__(self, 
+                 num_cols=10, 
+                 num_rows=10, 
+                 num_important=1, 
+                 num_interaction_terms=None, 
+                 interaction_type='all', 
+                 monotonic=False,
+                 importance_ranking="scaled", 
+                 effects=None, 
+                 frequencies={}, 
+                 correlation_scale=0.9, 
+                 correlation_distribution='normal', 
+                 target='target', 
+                 intercept=0, 
+                 noise_distribution='normal', 
+                 noise_scale=0, 
+                 rng=None):
+        
         # Record initialization params
         self.num_cols = num_cols
         self.num_rows = num_rows
         self.num_important = num_important
         self.num_interaction_terms = num_interaction_terms if num_interaction_terms is not None else self.num_important
         self.interaction_type = interaction_type
+        self.monotonic = monotonic
         self.importance_ranking = importance_ranking
         self.effects = effects
         self.frequencies = frequencies
@@ -48,9 +66,11 @@ class DataGenerator:
         self.functions = DataGenerator.all_functions
         
         if interaction_type == 'all':
-                self.functions = DataGenerator.all_functions
+            self.functions = DataGenerator.all_functions
         elif interaction_type =='linear':
-                self.functions = DataGenerator.all_functions[0:1]
+            self.functions = DataGenerator.all_functions[0:1]
+        else:
+            raise ValueError("interaction_type must be either 'all' or 'linear'")
 
         self.interactions = self.generate_interactions()
 
@@ -68,15 +88,25 @@ class DataGenerator:
         if self.effects is None or type(self.effects) == str:
             self.effects = self.random_interaction(self.important_variables, functions=self.target_functions)
 
-        self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
         self.bucket_importances = {}
+        self.bucket_importances['constant'] = [1 if var in self.important_variables else 0 for var in self.cols]
+        self.bucket_importances['scaled'] = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
+        
+        #not implemented yet
+        self.bucket_importances['sobol'] = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
+
+        self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
 
         if importance_ranking == 'constant':
-            self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
-        elif importance_ranking == 'quick':
-            self.importances = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
+            self.importances = self.bucket_importances['constant']
+        elif importance_ranking == 'scaled':
+            self.importances = self.bucket_importances['scaled']
+        elif importance_ranking == 'sobol':
+            self.importances = self.bucket_importances['sobol']
+        else:
+            raise ValueError("importance_ranking must be 'constant', 'quick', or 'sobol'")
     
-    def random_interaction(self, interacting_variables, cols=None, functions=None):
+    def random_interaction(self, interacting_variables, cols=None, functions=None, monotonic=None):
         """
         Generates a pandas Series of lambda functions representing diverse interaction terms for binary data.
         Each function corresponds to a column in 'cols'.
@@ -99,6 +129,7 @@ class DataGenerator:
         # Set class values if parameters None
         cols = cols if cols is not None else self.cols
         functions = functions if functions is not None else self.functions
+        monotonic = monotonic if monotonic is not None else self.monotonic
 
         interaction_list = [lambda x: 0 for col in cols]
 
@@ -109,6 +140,8 @@ class DataGenerator:
             c = random.randint(1, DataGenerator.EFFECT_SCALE_RANGE)
             i = random.randint(0, 1)
             sign = random.choice([-1, 1])
+            if monotonic:
+                sign = 1
 
             f = lambda x, roll=roll, n=n, c=c, i=i, sign=sign: functions[roll](x, sign=sign, c=c, n=n, i=i)
 
@@ -207,7 +240,13 @@ class DataGenerator:
             raise ValueError("Unsupported distribution. Choose from 'uniform', 'normal', or 'gamma'.")
 
         return noise
+    
+    def predict(self, X, effects=None, target=None):
+        effects = effects if effects is not None else self.effects
+        target = target if target is not None else self.target
 
+        return sum(X[col].apply(effects[col]) for col in X.columns if col != target)
+    
     def generate_data(self, num_rows=None, cols=None, frequencies=None, effects=None, interactions=None, target=None, intercept=None, noise_distribution=None, noise_scale=None):
         """
         Generates a complex dataset with binary columns, interaction terms, noise, and a target variable.
@@ -270,12 +309,10 @@ class DataGenerator:
             df[col] = df[col].astype(int)
         
         df = df.copy()
-            
-        # Generate noise uniformly
-        noise = self.generate_noise(scale=noise_scale, distribution=noise_distribution, size=df.shape[0])
 
-        # Calculate target variable
-        important_sum = sum(df[col].apply(effects[col]) for col in df.columns if col != target)
+        important_sum = self.predict(df)
+        
+        noise = self.generate_noise(scale=noise_scale * np.max(np.abs(important_sum)), distribution=noise_distribution, size=df.shape[0])
 
         # Generate target based on important cols, interactions, and non-linear effects
         df[target] = important_sum + noise + intercept

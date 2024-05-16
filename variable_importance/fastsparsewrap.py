@@ -4,7 +4,7 @@ import fastsparsegams
 from sklearn.base import BaseEstimator, TransformerMixin
 
 class FastSparseSklearn(BaseEstimator, TransformerMixin):
-    def __init__(self, max_support_size=10, tol=1e-8, lambda_0=0.025, gamma=0):
+    def __init__(self, max_support_size=10, atol=1e-8, lambda_0=0.025, gamma=0, penalty="L0"):
         # self.data = data 
         # self.labels = labels
         # self.data = data.to_numpy() if not isinstance(data, np.ndarray) else data
@@ -13,9 +13,10 @@ class FastSparseSklearn(BaseEstimator, TransformerMixin):
         # self.num_features = np.shape(data)[1]
         self.max_support_size = max_support_size
         # self.labels = self.labels[0].T
-        self.tol = tol
+        self.atol = atol
         self.lambda_0 = lambda_0
         self.gamma = gamma
+        self.penalty=penalty
         
     def transform(self, data):
         # Check if data is a DataFrame and convert it directly to a numpy array
@@ -33,7 +34,7 @@ class FastSparseSklearn(BaseEstimator, TransformerMixin):
     def fit(self, data, labels):
         data = self.transform(data)
         labels = self.transform(labels)
-        self.model = fastsparsegams.fit(data, labels, penalty="L0", max_support_size=self.max_support_size, algorithm = "CDPSI")
+        self.model = fastsparsegams.fit(data, labels, penalty=self.penalty, max_support_size=self.max_support_size, atol=self.atol, algorithm = "CDPSI")
         
         coefficients = self.model.coeff(lambda_0=self.lambda_0, gamma=self.gamma, include_intercept=False).toarray()
         self.coef_ = np.squeeze(coefficients) #might need to do more processing later
