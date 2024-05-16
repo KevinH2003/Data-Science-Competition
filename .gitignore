@@ -4,3 +4,4 @@ __pycache__/
 variable_importance/__pycache__
 cmr.py
 rashomonwrap.py
+Slurm Results/

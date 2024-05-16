@@ -90,10 +90,11 @@ class DataGenerator:
 
         self.bucket_importances = {}
         self.bucket_importances['constant'] = [1 if var in self.important_variables else 0 for var in self.cols]
-        self.bucket_importances['scaled'] = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
-        
+        self.bucket_importances['scaled'] = [max(abs(self.effects[var](0)), abs(self.effects[var](1))) if var in self.important_variables else 0 for var in self.cols]
+        #self.bucket_importances['scaled_raw'] = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
+
         #not implemented yet
-        self.bucket_importances['sobol'] = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
+        #self.bucket_importances['sobol'] = [max(self.effects[var](0), self.effects[var](1), key=abs) if var in self.important_variables else 0 for var in self.cols]
 
         self.importances = [1 if var in self.important_variables else 0 for var in self.cols]
 
@@ -101,8 +102,8 @@ class DataGenerator:
             self.importances = self.bucket_importances['constant']
         elif importance_ranking == 'scaled':
             self.importances = self.bucket_importances['scaled']
-        elif importance_ranking == 'sobol':
-            self.importances = self.bucket_importances['sobol']
+        #elif importance_ranking == 'sobol':
+        #    self.importances = self.bucket_importances['sobol']
         else:
             raise ValueError("importance_ranking must be 'constant', 'quick', or 'sobol'")
     

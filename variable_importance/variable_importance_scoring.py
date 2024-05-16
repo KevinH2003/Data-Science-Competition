@@ -1,12 +1,14 @@
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import r2_score
 from scipy.stats import spearmanr
+import random
 import time
 import warnings
 
 def importance_score_estimator(estimator, X, y, true_importances=[], importance_attr='feature_importances_', score=spearmanr):
     warnings.filterwarnings("error")
     estimator.fit(X, y)
+
     try:
         pred_importances = getattr(estimator, importance_attr)
         correlation, _ = score(true_importances, pred_importances)
@@ -15,19 +17,47 @@ def importance_score_estimator(estimator, X, y, true_importances=[], importance_
     finally:
         return correlation
 
-def importance_score(pred_importances, true_importances=[], score=spearmanr):
+def importance_score(pred_importances, true_importances=[], score=spearmanr, scramble=True, num_scrambles=5):
     warnings.filterwarnings("error")
+
+    if scramble:
+        min_importance = min(true_importances)
+        random_coeff = min(min_importance * -0.1, -0.00000001)
+
+        #Scramble non-important variables in true importances and get score
+        scrambled_correlations = []
+        for i in range(num_scrambles):
+            scrambled_true_importances = [importance if importance != 0 else random_coeff * random.random() for importance in true_importances]
+            try:
+                scrambled_correlation, _ = score(true_importances, scrambled_true_importances)
+            except Exception as e:
+                print(e)
+                scrambled_correlation = 1
+            finally:
+                scrambled_correlations.append(scrambled_correlation)
+
+        #Get average of scrambled scores as hypothetical "Max" score
+        scrambled_average = sum(scrambled_correlations) / len(scrambled_correlations)
+    
     try:
         correlation, _ = score(true_importances, pred_importances)
+
+        if scramble:
+            correlation = correlation / scrambled_average
+
     except Exception as e:
         print(e)
         correlation = 0
     finally:
         return correlation
 
-def model_importance_score(model, true_importances, importance_attr, score=spearmanr):
+def model_importance_score(model, true_importances, importance_attr, score=spearmanr, scramble=True, absolute_value=True):
     pred_importances = list(getattr(model, importance_attr))
-    return importance_score(pred_importances, true_importances=true_importances, score=score)
+
+    if absolute_value:
+        pred_importances = [abs(x) for x in pred_importances]
+
+    return importance_score(pred_importances, true_importances=true_importances, score=score, scramble=scramble)
 
 def cross_validation_scores(cv, X, y, test_size=0.3, importance_attr='feature_importances_', true_importances={}, score_function=model_importance_score, verbose=False):
     '''
