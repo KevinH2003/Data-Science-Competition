@@ -1,8 +1,13 @@
 from sklearn.model_selection import train_test_split
-from sklearn.metrics import r2_score
+from sklearn.metrics import r2_score, mean_squared_error
 from scipy.stats import spearmanr
 import random
 import time
+from variable_importance.cmr import CMR
+from variable_importance.loco import LOCOImportance
+from variable_importance.mr import MRImportance
+import numpy as np
+import shap
 import warnings
 
 def importance_score_estimator(estimator, X, y, true_importances=[], importance_attr='feature_importances_', score=spearmanr):
@@ -45,11 +50,17 @@ def importance_score(pred_importances, true_importances=[], score=spearmanr, scr
         if scramble:
             correlation = correlation / scrambled_average
 
+        pred_linked = [(i, pred_importances[i]) for i in range(len(pred_importances))]
+        pred_linked = sorted(pred_linked, key=lambda x: -x[1])
+        ranks = [(pred_linked[i][0], i+1) for i in range(len(pred_linked))]
+        ranks = sorted(ranks, key=lambda x: x[0])
+        ranks = [val[1] for val in ranks]
     except Exception as e:
         print(e)
         correlation = 0
+        ranks = []
     finally:
-        return correlation
+        return correlation, ranks
 
 def model_importance_score(model, true_importances, importance_attr, score=spearmanr, scramble=True, absolute_value=True):
     pred_importances = list(getattr(model, importance_attr))
@@ -59,11 +70,14 @@ def model_importance_score(model, true_importances, importance_attr, score=spear
 
     return importance_score(pred_importances, true_importances=true_importances, score=score, scramble=scramble)
 
+
 def cross_validation_scores(cv, X, y, test_size=0.3, importance_attr='feature_importances_', true_importances={}, score_function=model_importance_score, verbose=False):
     '''
     Present an initialized cross-validator such as GridSearchCV or RandomizedSearchCV
     '''
     scores = {}
+    names = X.columns
+    ranks = {'features': names}
     # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
@@ -78,7 +92,8 @@ def cross_validation_scores(cv, X, y, test_size=0.3, importance_attr='feature_im
         scores['params'] = None
         scores['training_r2'] = None
         scores['test_r2'] = None
-        scores['importance_score'] = None
+        #for name in score_functions:
+        #    scores[name] = None
 
         failed = True
     finally:
@@ -123,4 +138,4 @@ def cross_validation_scores(cv, X, y, test_size=0.3, importance_attr='feature_im
                 score = scores[importance + "_importance_score"]
                 print(f"{importance} Importance Score: {score}")
 
-    return scores
+    return scores, ranks
