@@ -1,5 +1,5 @@
 TestFiles/
-results_folder/
+importance_testing_results/
 __pycache__/
 variable_importance/__pycache__
 rashomonwrap.py

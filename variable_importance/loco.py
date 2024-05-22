@@ -55,9 +55,10 @@ class LOCOImportance:
         return test_score
         
 
-    def get_importance(self):
+    def get_importance(self, verbose=False):
         base_cv_score = self._get_cv_score()
-        print(f'base score={np.mean(base_cv_score)} {base_cv_score}')
+        if verbose:
+            print(f'base score={np.mean(base_cv_score)} {base_cv_score}')
 
         if self.n_jobs is not None and self.n_jobs > 1:
             pass
@@ -66,5 +67,6 @@ class LOCOImportance:
             for f in tqdm(self.loco_features):
                 loco_cv_scores.append(self._get_cv_score(f))
             loco_cv_scores_normalized = np.array([base_cv_score - loco_cv_score for loco_cv_score in loco_cv_scores])
-        print(loco_cv_scores_normalized)
+        if verbose:
+            print(loco_cv_scores_normalized)
         return loco_cv_scores_normalized
