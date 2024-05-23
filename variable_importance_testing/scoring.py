@@ -12,15 +12,27 @@ import warnings
 
 from variable_importance_testing.pipelining import VI_Pipeline, FeatureSelector
 
-def rank_importances(pred_importances):
-    pred_linked = [(i, pred_importances[i]) for i in range(len(pred_importances))]
-    pred_linked = sorted(pred_linked, key=lambda x: -x[1])
-    ranks = [(pred_linked[i][0], i+1) for i in range(len(pred_linked))]
+def rank_importances(importances):
+    """
+    Rank variables by importance
+
+    Parameters:
+    importances (list-like): Variable importances, with the index 
+        corresponding to the variable and importances[x] corresponding to x's importance
+
+    Returns:
+    list: The ranking of variables by importance, with index being the rank
+        (ranks[i] = x means x is the i+1st most important variable)
+    """
+    linked = [(i, importances[i]) for i in range(len(importances))]
+    linked = sorted(linked, key=lambda x: -x[1])
+    ranks = [(linked[i][0], i+1) for i in range(len(linked))]
     ranks = sorted(ranks, key=lambda x: x[0])
     ranks = [val[1] for val in ranks]
 
     return ranks
 
+###TODO: Implement top n scoring (x/n important variables are in top n => x/n score)
 def importance_score(pred_importances, true_importances, 
                      score=spearmanr, scramble=True, num_scrambles=5, ranked=False):
     """

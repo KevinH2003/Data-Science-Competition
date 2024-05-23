@@ -34,6 +34,31 @@ class DataGenerator:
                  noise_distribution='normal', 
                  noise_scale=0, 
                  rng=None):
+        """
+        Initialize the DataGenerator with specified parameters.
+
+        Parameters:
+        - num_cols (int, optional): Number of columns/features in the dataset (default is 10).
+        - num_rows (int, optional): Number of rows in the dataset (default is 10).
+        - num_important (int, optional): Number of important columns (default is 1).
+        - num_interaction_terms (int, optional): Number of interaction terms (default is the value of num_important).
+        - interaction_type (str, optional): Type of interactions ('all' or 'linear') (default is 'all').
+        - monotonic (bool, optional): Whether effects are monotonic (default is False).
+        - importance_ranking (str, optional): Method of importance ranking ('constant' or 'scaled') (default is 'scaled').
+        - effects (str or list-like of function, optional): Effects applied to columns 
+            must be either one of ('all', 'linear', 'constant') 
+            or a list-like structure with length equal to the number of columns
+            such that the value at every index i is the effect of variable i on the target. 
+            (default is None)
+        - frequencies (dict-like, optional): Frequencies of 1s in binary columns (default is an empty dictionary).
+        - correlation_scale (float): Scale of correlation for interactions (default is 0.9).
+        - correlation_distribution (str, optional): Distribution type for correlations ('normal', 'uniform', 'beta') (default is 'normal').
+        - target (str, optional): Name of the target column (default is 'target').
+        - intercept (float, optional): Intercept for the target variable (default is 0).
+        - noise_distribution (str, optional): Distribution type for noise ('normal', 'uniform', 'gamma') (default is 'normal').
+        - noise_scale (float, optional): Scale of the noise (default is 0).
+        - rng (np.random.Generator, optional): Random number generator instance (default is None).
+        """
         
         # Record initialization params
         self.num_cols = num_cols
@@ -109,23 +134,16 @@ class DataGenerator:
     
     def random_interaction(self, interacting_variables, cols=None, functions=None, monotonic=None):
         """
-        Generates a pandas Series of lambda functions representing diverse interaction terms for binary data.
-        Each function corresponds to a column in 'cols'.
-
-        Note that this function is meant to provide a list of functions that will all be applied and then summed
-        in order to get the value of a single column in the generated data. Use the generate_interactions
-        function to generate all interactions for a generated dataset.
+        Generate random interaction effects for specified columns.
 
         Parameters:
-        - cols (list-like): List of all column indices in the dataset
-        - interacting_variables (list-like): List of column indices within 'cols' for which to
-          generate specific interaction terms based on random selections of interactions.
-        - functions (list-like of functions): List of functions to choose from when generating interactions.
-          Should have parameters n, c, i, and sign
+        - interacting_variables (list-like): List of columns to apply interactions.
+        - cols (list-like, optional): List of all columns (default is self.cols).
+        - functions (list-like, optional): List of functions to apply for interactions (default is self.functions).
+        - monotonic (bool, optional): Whether interactions are monotonic (default is self.monotonic).
 
         Returns:
-        - series of lambda functions: Each function is designed to apply a specific interaction
-          to its input, based on the type of interaction randomly assigned to its corresponding column.
+        - pd.Series: Series of interaction effects for each column.
         """
         # Set class values if parameters None
         cols = cols if cols is not None else self.cols
@@ -150,31 +168,25 @@ class DataGenerator:
 
         return pd.Series(interaction_list)
 
-    def generate_interactions(self, cols=None, interaction_terms=None, important_variables=None, scale=None, distribution=None):
+    def generate_interactions(self, 
+                              cols=None, 
+                              interaction_terms=None, 
+                              important_variables=None, 
+                              scale=None, 
+                              distribution=None):
         """
-        Generates interaction terms for a dataset by selecting random samples of columns and creating interaction
-        functions for them. This function orchestrates the creation of a comprehensive dataframe of interaction
-        terms, combining both targeted columns and a subset of other columns to enrich the dataset's features with
-        interactions. Apply the generated interaction functions across a dataset for generated interaction terms
-
-        This function relies on 'random_interaction' to create specific interaction functions for each term and 'random_interactions'
-        to compile these into a dictionary format suitable for application across a dataset.
+        Generate interaction terms between columns.
 
         Parameters:
-        - cols (list-like): List of all column indices in the dataset. This list is used to randomly select columns for
-        generating interactions.
-        - interaction_terms (list-like): List of column indices for which interaction terms are explicitly desired.
-        This list guides the focus of interaction term generation.
-        - important_variables (list-like of int, optional): The subset of 'cols' that are actually used in calculation of target variable.
-        If not provided, defaults to using 'cols'.
-        - important_samples (int, optional): Number of samples to take from the important variables for each interaction term.
-        If not provided, defaults to one-fifth of the length of 'targets'.
-        - other_samples (int, optional): Number of samples to take from the set difference of 'cols' and 'targets' for each interaction term.
-        If not provided, defaults to one-fifth of the difference in length between 'cols' and 'targets'.
+        - cols (list-like, optional): List of all columns (default is self.cols).
+        - interaction_terms (list-like, optional): List of columns to be used for interaction terms 
+            (default is self.interaction_terms).
+        - important_variables (list-like, optional): List of important columns (default is self.important_variables).
+        - scale (float, optional): Scale of correlation for interactions (default is self.correlation_scale).
+        - distribution (str, optional): Distribution type for correlations ('normal', 'uniform', 'beta') (default is self.correlation_distribution).
 
         Returns:
-        - Series: A Series where each index corresponds to an index of an interaction term, and the row is a list of functions.
-        These functions, when applied, generate the interaction terms for the dataset, ready for use in further analysis or modeling.
+        - dict: Dictionary of interaction terms with corresponding columns and correlations.
         """
         # Set class values if parameters None
         cols = cols if cols is not None else self.cols
@@ -206,24 +218,22 @@ class DataGenerator:
 
         return interactions
     
-    def generate_noise(self, size, distribution=None, scale=None):
+    def generate_noise(self, size=None, distribution=None, scale=None):
         """
-        Generate noise using NumPy.
+        Generate noise for the dataset.
 
         Parameters:
-        - distribution: Type of distribution to generate noise from.
-                         Supported distributions: 'uniform', 'normal', 'gamma'
-                         Default is 'uniform'.
-        - scale: Scale parameter for the chosen distribution.
-                 For 'uniform', it's the range of the distribution.
-                 For 'normal', it's the standard deviation.
-                 For 'gamma', it's the shape parameter.
-                 Default is 1.0.
+        - size (int, optional): Number of noise samples to generate. (default is self.num_rows)
+        - distribution (str, optional): Distribution type for noise ('normal', 'uniform', 'gamma') 
+            (default is self.noise_distribution).
+        - scale (float, optional): Scale of the noise (default is self.noise_scale).
 
         Returns:
-        - noise: NumPy array containing generated noise.
+        - np.ndarray: Array of noise values.
         """
 
+        # Set defaults
+        size = self.num_rows if size is None else size
         distribution = self.noise_distribution if distribution is None else distribution
         scale = self.noise_scale if scale is None else scale
 
@@ -243,6 +253,17 @@ class DataGenerator:
         return noise
     
     def predict(self, X, effects=None, target=None):
+        """
+        Predict the target variable based on input features and effects.
+
+        Parameters:
+        - X (pd.DataFrame): Input feature matrix.
+        - effects (list, optional): List of effect functions for each column (default is self.effects).
+        - target (str, optional): Name of the target column (default is self.target).
+
+        Returns:
+        - pd.Series: Predicted target values.
+        """
         if not isinstance(X, pd.DataFrame):
             X = pd.DataFrame(X)
 
@@ -255,35 +276,29 @@ class DataGenerator:
     
     def generate_data(self, num_rows=None, cols=None, frequencies=None, effects=None, interactions=None, target=None, intercept=None, noise_distribution=None, noise_scale=None):
         """
-        Generates a complex dataset with binary columns, interaction terms, noise, and a target variable.
+        Generates a dataset with binary columns, interaction terms, noise, and a target variable.
+
+        Parameters:
+        - num_rows (int, optional): Number of rows in the dataset (default is self.num_rows).
+        - cols (list-like, optional): List of columns/features in the dataset (default is self.cols).
+        - frequencies (dict-like, optional): Frequencies of 1s in binary columns (default is self.frequencies).
+        - effects (list-like, optional): List of effect functions for each column (default is self.effects).
+        - interactions (dict-like, optional): Dictionary of interaction terms (default is self.interactions).
+        - target (str, optional): Name of the target column (default is self.target).
+        - intercept (float, optional): Intercept for the target variable (default is self.intercept).
+        - noise_distribution (str, optional): Distribution type for noise ('normal', 'uniform', 'gamma') 
+            (default is self.noise_distribution).
+        - noise_scale (float, optional): Scale of the noise (default is self.noise_scale).
+
+        Returns:
+        - pd.DataFrame: Generated dataset.
+
         This function allows for the simulation of datasets with specified properties, including
         predefined effects for certain columns, variable frequencies, interactions between variables,
         and a range of noise to simulate real-world data variance.
-
-        Parameters:
-        - num_rows (int): Number of rows (samples) in the generated dataset.
-        - cols (list-like): List of column indices that will be included in the dataset.
-        - effects (dict, optional): Dictionary where keys are column indices and values are functions
-        that define how each column influences the target variable.
-        - frequencies (dict, optional): Dictionary specifying the frequency (probability) of 1s for each binary column.
-        Keys are column indices, and values are probabilities (0 to 1).
-        - interactions (dict or Series, optional): Dictionary specifying interactions between columns.
-        Keys are column indices, and values are lists of functions representing the interaction effects.
-        - target (str, optional): Name of the target column.
-        - intercept (float, optional): The intercept (bias) term added to the target variable calculation.
-        It can shift the target variable up or down.
-        - noise (float, optional): Bound for the uniform distribution from which noise is generated (from -1 * noise to noise)
-
-        Returns:
-        - DataFrame: A pandas DataFrame containing the generated dataset. Includes binary columns as specified by 'cols',
-        interaction terms as specified by 'interactions', and a target column influenced by 'effects', 'intercepts', and added noise.
-
-        This function first generates binary data for each column based on specified frequencies.
-        Then, it applies interaction functions to create complex relationships between variables.
-        Noise is uniformly added to introduce variability.
-        The target variable is calculated by summing the effects of important columns, interactions, and noise, adjusted by the intercept.
-        This allows for the creation of datasets that can simulate various real-world scenarios, useful for testing machine learning models and data analysis techniques.
         """
+
+        # Set defaults
         num_rows = num_rows if num_rows is not None else self.num_rows
         cols = cols if cols is not None else self.cols
         frequencies = frequencies if frequencies is not None else self.frequencies
