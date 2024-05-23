@@ -10,7 +10,7 @@ Below are examples demonstrating how to use the provided tools.
 import numpy as np
 import pandas as pd
 from sklearn.linear_model import Lasso
-from variable_importance.scoring import importance_score, model_importance_score
+from variable_importance_testing.scoring import importance_score, model_importance_score
 
 
 # Generate synthetic data
@@ -31,7 +31,7 @@ model_importance_score(model, true_importances, importance_attr='coef_')
 
 ```
 import pandas as pd
-from variable_importance.dgp import DataGenerator
+from variable_importance_testing.dgp import DataGenerator
 
 # Initialize the DataGenerator with custom settings
 dgp = DataGenerator(
@@ -61,9 +61,9 @@ import numpy as np
 import pandas as pd
 from xgboost import XGBRegressor
 from sklearn.linear_model import Lasso
-from variable_importance.dgp import DataGenerator
-from variable_importance.fastsparsewrap import FastSparseSklearn
-from variable_importance.scoring import importance_testing
+from variable_importance_testing.dgp import DataGenerator
+from variable_importance_testing.fastsparsewrap import FastSparseSklearn
+from variable_importance_testing.scoring import importance_testing
 
 # Define parameter grids
 param_grid_lasso = {
