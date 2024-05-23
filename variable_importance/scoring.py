@@ -4,6 +4,7 @@ import os
 import pandas as pd
 from sklearn.model_selection import GridSearchCV, RandomizedSearchCV, train_test_split
 from sklearn.metrics import r2_score
+from sklearn.preprocessing import MinMaxScaler
 from scipy.stats import spearmanr
 import random
 import time
@@ -11,15 +12,50 @@ import warnings
 
 from variable_importance.pipelining import VI_Pipeline, FeatureSelector
 
-def importance_score(pred_importances, true_importances=None, 
-                     score=spearmanr, scramble=True, num_scrambles=5, ranked=False):
-    true_importances = true_importances if true_importances is not None else []
+def rank_importances(pred_importances):
+    pred_linked = [(i, pred_importances[i]) for i in range(len(pred_importances))]
+    pred_linked = sorted(pred_linked, key=lambda x: -x[1])
+    ranks = [(pred_linked[i][0], i+1) for i in range(len(pred_linked))]
+    ranks = sorted(ranks, key=lambda x: x[0])
+    ranks = [val[1] for val in ranks]
 
+    return ranks
+
+def importance_score(pred_importances, true_importances, 
+                     score=spearmanr, scramble=True, num_scrambles=5, ranked=False):
+    """
+    Calculate the efficacy of a variable importance prediction against a ground truth.
+
+    Parameters:
+    pred_importances (array-like): The predicted importances.
+    true_importances (array-like): The ground truth importances.
+    score (function, optional): A function to compute the correlation (default is spearmanr).
+    scramble (bool, optional): Whether to scramble non-important variables in the true importances. 
+        This isn't necessary for non-ranking based scoring functions such as pearson correlation.  
+        (default is True)
+    num_scrambles (int, optional): The number of scrambles to perform (default is 5).
+    ranked (bool, optional): Whether to return a separate ranking of the variables by importance 
+        If True, will return a tuple of (importance score, ranks). (default is False).
+
+    Returns:
+    float: The importance score.
+    list (optional): The ranks of the predicted importances (if ranked is True).
+    """
+    
+    # Copy and scale inputs
+    scaler = MinMaxScaler()
+    
+    pred_importances = pred_importances.copy()
+    true_importances = true_importances.copy()
+
+    pred_importances = scaler.fit_transform(pred_importances)
+    true_importances = scaler.fit_transform(true_importances)
+
+    #Scramble non-important variables in true importances and get score
     if scramble:
         min_importance = min(true_importances)
         random_coeff = min(min_importance * -0.1, -0.00000001)
 
-        #Scramble non-important variables in true importances and get score
         scrambled_correlations = []
         for i in range(num_scrambles):
             scrambled_true_importances = [importance if importance != 0 else random_coeff * random.random() for importance in true_importances]
@@ -34,17 +70,15 @@ def importance_score(pred_importances, true_importances=None,
         #Get max of scrambled scores as hypothetical "Max" score
         scrambled_max = max(scrambled_correlations)
     
+    # Calculate the correlation between true and predicted importances
     try:
         correlation, _ = score(true_importances, pred_importances)
         if scramble:
             correlation = correlation / scrambled_max
 
         if ranked:
-            pred_linked = [(i, pred_importances[i]) for i in range(len(pred_importances))]
-            pred_linked = sorted(pred_linked, key=lambda x: -x[1])
-            ranks = [(pred_linked[i][0], i+1) for i in range(len(pred_linked))]
-            ranks = sorted(ranks, key=lambda x: x[0])
-            ranks = [val[1] for val in ranks]
+            # Rank the predicted importances
+            ranks = rank_importances(pred_importances=pred_importances)
 
     except Exception as e:
         print(e)
@@ -56,12 +90,42 @@ def importance_score(pred_importances, true_importances=None,
             return correlation, ranks
         return correlation
 
-def model_importance_score(model, true_importances, importance_attr, score=spearmanr, absolute_value=True, scramble=True, num_scrambles=5, ranked=False):
-    pred_importances = list(getattr(model, importance_attr))
+def model_importance_score(model, true_importances, importance_attr=None, score=spearmanr, 
+                           absolute_value=True, scramble=True, num_scrambles=5, ranked=False):
+    """
+    Calculate the importance score of a model's variable importance predictions against the ground truth.
 
+    Parameters:
+    model (object): The model object containing variable importance attributes.
+    true_importances (array-like): The ground truth importances.
+    importance_attr (str, optional): The attribute name for the model's predicted importances. If None, attempts to infer.
+    score (function, optional): A function to compute the correlation (default is spearmanr).
+    absolute_value (bool, optional): Whether to take the absolute value of the predicted importances (default is True).
+    scramble (bool, optional): Whether to scramble non-important variables in the true importances
+        (see importance_score scramble parameter) (default is True).
+    num_scrambles (int, optional): The number of scrambles to perform (default is 5).
+    ranked (bool, optional): Whether to return the ranked importances (default is False).
+
+    Returns:
+    float: The importance score.
+    list (optional): The ranks of the predicted importances (if ranked is True).
+    """
+    
+    # Attempt to infer importance attribute if None provided
+    if importance_attr is None:
+        if hasattr(model, 'feature_importances_'):
+            importance_attr = 'feature_importances_'
+        elif hasattr(model, 'coef_'):
+            importance_attr = 'coef_'
+        else:
+            raise ValueError("Cannot infer importance attribute, model does not have feature_importances_ or coef_ attributes")
+
+    # Get predicted importances and take absolute value if specified
+    pred_importances = list(getattr(model, importance_attr))
     if absolute_value:
         pred_importances = [abs(x) for x in pred_importances]
 
+    # Return importance score
     return importance_score(pred_importances, true_importances=true_importances, score=score, scramble=scramble, num_scrambles=num_scrambles, ranked=ranked)
 
 def importance_scores(model, 
@@ -72,15 +136,41 @@ def importance_scores(model,
                       importance_attr=None, 
                       score_functions=None, 
                       cross_validate=False, 
-                      ranked=False, 
                       include_results=False, 
+                      ranked=False, 
                       verbose=False):
-    '''
-    Present an initialized cross-validator such as GridSearchCV or RandomizedSearchCV
-    '''
+    """
+    Evaluate a model on a dataset and then, using the fitted model, 
+    evaluate one or more metrics of variable importance on one or more ground truths.
+
+    Parameters:
+    model (object): The model object to evaluate. 
+        (Or a CV object such as GridSearchCV or RandomizedSearchCV if cross-validate is True)
+    X (array-like): The feature dataset.
+    y (array-like): The target variable.
+    true_importances (list or dict): The ground truth importances.
+    test_size (float, optional): The proportion of the dataset to include in the test split (default is 0.3).
+    importance_attr (str, optional): The attribute name for the model's predicted importances. 
+        If None, will attempt to infer (see model_importance_score)
+    score_functions (dict or callable, optional): A dictionary of scoring functions 
+        or a single scoring function (default is {"model importance": model_importance_score}).
+    cross_validate (bool, optional): Whether to perform cross-validation. 
+        (If True, model must be a CV object) (default is False)
+    include_results (bool, optional): Whether to include cross-validation results. 
+        For disambiguation, this refers solely to the .cv_results_ parameter of the CV object.
+        The best model and parameters from the CV will always be returned if cross-validate is True.
+        (cross-validate must be True for this to have any effect) (default is False).
+    ranked (bool, optional): Whether to return the ranked importances (default is False).
+    verbose (bool, optional): Whether to print verbose output (default is False).
+
+    Returns:
+    dict: A dictionary containing the importance scores, R^2 scores, completion times, 
+        and optional cross-validation results and importance rankings.
+    """
+    
     score_functions = score_functions if score_functions is not None else {"model importance": model_importance_score}
     
-    # Handle if single true_importance and score_function
+    # Handle if single true_importance or single score_function
     if isinstance(true_importances, list):
         true_importances = {"standard": true_importances}
     if callable(score_functions):
@@ -92,6 +182,7 @@ def importance_scores(model,
     # Split the data into training and testing sets
     X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
 
+    # Cross validation
     if cross_validate:
         cv = model
 
@@ -99,11 +190,14 @@ def importance_scores(model,
             print(f"Starting Cross-Validation...")
 
         failed = False
-        start_time = time.time()
+        start_time = time.time() # Start timer
         try:
             warnings.simplefilter("ignore", DeprecationWarning)
             cv.fit(X_train, y_train)
         except Exception as e:
+            # Exit with None values upon exception so as to not disturb loop 
+            # if running importance testing on multiple models/datasets
+
             print("something bad happened: " + str(e))
             scores['model'] = None
             scores['params'] = None
@@ -118,15 +212,12 @@ def importance_scores(model,
             if failed:
                 return scores
         
-        end_time = time.time()  # Stop tracking time
-
+        end_time = time.time()  # Stop timer and record CV time
         cv_elapsed_time = end_time - start_time
-
-        scores['cv_time'] = time.strftime("%H:%M:%S", time.gmtime(cv_elapsed_time))
-        scores['times']['cv'] = scores['cv_time']
+        scores['times']['cv'] = time.strftime("%H:%M:%S", time.gmtime(cv_elapsed_time))
 
         if verbose:
-            print(f"Finished Cross-Validating in {scores['cv_time']}")
+            print(f"Finished Cross-Validating in {scores['times']['cv']}")
 
         best_model = cv.best_estimator_
         scores['model'] = best_model
@@ -137,54 +228,52 @@ def importance_scores(model,
         best_model = model
         best_model.fit(X_train, y_train)
 
+    if cross_validate:
+        scores['cv_r2'] = cv.best_score_
+
     # Calculate predictions for the training set and the test set
     y_train_pred = best_model.predict(X_train)
     y_test_pred = best_model.predict(X_test)
-
-    if cross_validate:
-        scores['cv_r2'] = cv.best_score_
 
     # Training and test R^2 score
     scores['training_r2'] = r2_score(y_train, y_train_pred)
     scores['test_r2'] = r2_score(y_test, y_test_pred)
 
-    if importance_attr is None:
-        if hasattr(best_model, 'feature_importances_'):
-            importance_attr = 'feature_importances_'
-        elif hasattr(best_model, 'coef_'):
-            importance_attr = 'coef_'
-
     if ranked:
         scores["ranks"] = {}
-
         for importance in true_importances:
             scores["ranks"][importance] = {}
 
+    # Perform every scoring function on every ground truth
     for score_func in score_functions:
         if verbose:
             print(f"Starting {score_func} Scoring...")
             
-        score_start_time = time.time()
+        score_start_time = time.time() # Start timer
         for importance in true_importances:
-            #change this so it can accept all true importances at once to save time
+            #note: maybe change this so it can accept all true importances at once to save time
             if ranked:
-                scores[importance + "_" + score_func + "importance_score"], scores["ranks"][importance][score_func] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
+                scores[importance + "_" + score_func + "_score"], scores["ranks"][importance][score_func] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
+                print(importance, score_func)
+                print(scores[importance + "_" + score_func + "_score"], scores["ranks"][importance][score_func])
             else:
                 scores[importance + "_" + score_func + "importance_score"] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
-        score_end_time = time.time()
+        
+        score_end_time = time.time() # End timer and record time to score
         score_elapsed_time = score_end_time - score_start_time
-
         scores["times"][score_func] = time.strftime("%H:%M:%S", time.gmtime(score_elapsed_time))
+
         if verbose:
             print(f"Finished Scoring in {scores['times'][score_func]}")
 
+    # Print results if verbose
     if verbose:
         print(f"Scores For {best_model.__class__}")
         print(f"Training R^2 Score: {scores['training_r2']}")
         if cross_validate:
             print(f"CV R^2 Score: {scores['cv_r2']}")
-
         print(f"Test R^2 Score: {scores['test_r2']}")
+
         for importance in true_importances:
             for score_func in score_functions:
                 score = scores[importance + "_" + score_func + "_score"]
@@ -193,10 +282,10 @@ def importance_scores(model,
     return scores
 
 
-def importance_testing(models: dict, 
-                       param_grids: dict, 
-                       datasets: dict, 
-                       true_importances: dict, 
+def importance_testing(models, 
+                       param_grids, 
+                       datasets, 
+                       true_importances, 
                        score_functions=None, 
                        importance_attrs=None, 
                        trimming_steps=None, 
@@ -209,9 +298,40 @@ def importance_testing(models: dict,
                        results_folder="importance_testing_results",
                        verbose=True
                        ):
+    """
+    A comprehensive testing loop over multiple models, datasets, and variable importance metrics,
+
+
+    Parameters:
+    models (dict-like): Dictionary of model names and their corresponding model objects.
+    param_grids (dict-like): Dictionary of model names and their 
+        corresponding parameter grids for hyperparameter tuning.
+    datasets (dict-like): Dictionary of dataset names and their corresponding dataframes.
+    true_importances (dict-like): Dictionary of dataset names and their corresponding true importances.
+    score_functions (dict-like or callable, optional): Dictionary of scoring 
+        functions or a single scoring function (default is {'model_importance': model_importance_score}).
+    importance_attrs (dict-like, optional): Dictionary of model names 
+        and their corresponding importance attribute names.
+    trimming_steps (dict-like, optional): Dictionary of model names and their corresponding trimming steps.
+    final_predictors (dict-like, optional): Dictionary of final predictor names 
+        and their corresponding model objects.
+    n_iters (dict-like or int, optional): Number of iterations for randomized search. 
+        If an int, the same value is used for all models.
+    num_folds (int, optional): Number of folds for cross-validation (default is 3).
+    ranked (bool, optional): Whether to return ranked importances (default is False).
+    grid_search (bool, optional): Whether to use GridSearchCV instead of RandomizedSearchCV (default is False).
+    save_results (bool, optional): Whether to save the results to CSV files (default is True).
+    results_folder (str, optional): Folder to save the results (default is "importance_testing_results").
+    verbose (bool, optional): Whether to print verbose output (default is True).
+
+    Returns:
+    dict: Aggregated scores for each dataset.
+    """
+     
     if verbose:
         print("Starting Importance Testing...")
 
+    # Initialize default values for optional parameters
     if trimming_steps is None:
         trimming_steps = {}
     if final_predictors is None:
@@ -228,9 +348,11 @@ def importance_testing(models: dict,
     all_models.update(trimming_steps.keys())
     all_models.update(final_predictors.keys())
 
+    # If n_iters is an int, set all models to CV on the same number of iterations
     if isinstance(n_iters, int):
         n_iters = {model: n_iters for model in all_models}
 
+    # Determine n_iters for each model and set importance_attrs to default None value
     for model in all_models:
         if model not in importance_attrs:
             importance_attrs[model] = None
@@ -247,13 +369,15 @@ def importance_testing(models: dict,
 
     model_names = []
 
+    # Collect all model names and add trimming steps
     for model_name in models:
         model_names.append(model_name)
 
     for trimming_step in trimming_steps:
         if trimming_step not in model_names:
             model_names.append(trimming_step)
-    
+
+    # Prepare parameter grids, importance attributes, and n_iter fors final predictors (for pipelining)
     for predictor_name in final_predictors:
         new_grid = {}
 
@@ -273,14 +397,15 @@ def importance_testing(models: dict,
 
     aggregated_scores = {}
 
-    now = datetime.now()
+    now = datetime.now() #Start time
     current_time = now.strftime("%Y-%m-%d_%H:%M:%S")
 
     subfolder = results_folder + "/" + current_time
 
     # Create the folder if it doesn't exist
-    if not os.path.exists(subfolder):
-        os.makedirs(subfolder)
+    if save_results:
+        if not os.path.exists(subfolder):
+            os.makedirs(subfolder)
 
     print("Starting Testing...")
 
@@ -300,6 +425,7 @@ def importance_testing(models: dict,
             param_grid = param_grids[model_name]
             importance_attr = importance_attrs[model_name]
 
+            # Perform CV
             if grid_search:
                 cv = GridSearchCV(model, param_grid, cv=num_folds, scoring='r2', verbose=0, n_jobs=-1)
             else:
@@ -307,6 +433,7 @@ def importance_testing(models: dict,
 
             model_scores[model_name] = (importance_scores(cv, X, y, importance_attr=importance_attr, true_importances=true_importances[name], score_functions=score_functions, cross_validate=True, ranked=ranked, verbose=verbose))
 
+            # Create new pipelines with cross-validated model to every final predictor if model in trimming
             if model_name in trimming_steps:
                 if model_scores[model_name]["params"] is None:
                     continue
@@ -323,6 +450,7 @@ def importance_testing(models: dict,
                     pipeline_name = model_name + " + " + predictor_name
                     model_queue.append((pipeline_name, new_pipeline))
 
+        # Save results to a csv in results folder
         if save_results:
             aggregated_scores[name] = pd.DataFrame(model_scores)
 
@@ -333,3 +461,4 @@ def importance_testing(models: dict,
             print(f"Results saved to {file_path}")
 
     print("All Done!")
+    return aggregated_scores

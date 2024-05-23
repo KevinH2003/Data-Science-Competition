@@ -11,6 +11,9 @@ from variable_importance.loco import LOCOImportance
 from variable_importance.mr import MRImportance
 import numpy as np
 
+nrows = None
+results_folder = None
+
 print("Starting...")
 
 ###Parameter Grids###
@@ -21,10 +24,10 @@ param_grid_lasso = {
 }
 
 param_grid_fastsparse = {
-    "max_support_size": [5, 10, 15, 20, 25],
-    "atol": [1e-9, 1e-8, 1e-7, 1e-6],
-    "lambda_0": [0.001, 0.005, 0.01, 0.05, 0.1],
-    "penalty": ["L0"],
+    "max_support_size": [5, 10, 15],
+    "atol": [1e-9, 1e-8, 1e-7, 1e-6, 1e-5],
+    "lambda_0": [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1],
+    "penalty": ["L0", "L0L2", "L0L1"],
 }
 
 param_grid_xgb = {
@@ -53,15 +56,50 @@ param_grid_xgb_pipeline = {
 
 ###DGPs###
 
+small_input_df = pd.read_table('test_files/small_dataset/Input.txt', header=None, low_memory=False, nrows=nrows)
+small_pheno_df = pd.read_table('test_files/small_dataset/Pheno.txt', header=None, nrows=nrows).drop(columns=0, axis=1).reset_index(drop=True)
+small_test_SNP_metadata_df = pd.read_csv('test_files/small_dataset/Test.SNP.metadata.csv')
+
+small_input_df['target'] = small_pheno_df.iloc[:, 0]
+small_dataset_importances = small_test_SNP_metadata_df["EffectSize"]
+
 dgps = {
     "Toy": DataGenerator(
         num_cols=100, num_rows=100, num_important=10, 
         num_interaction_terms=0, effects='linear', 
         noise_distribution='normal', noise_scale=0.1),
+    "Slightly More Challening": DataGenerator(
+        num_cols=100, num_rows=100, num_important=10, num_interaction_terms=20, effects='all', 
+        correlation_scale=1.5, correlation_distribution='normal', 
+        intercept=10, noise_distribution='normal', noise_scale=0.3),
+    "High_Dimensionality": DataGenerator(
+        num_cols=10000, num_rows=100, num_important=10, num_interaction_terms=20, effects='all', 
+        correlation_scale=1, correlation_distribution='normal', 
+        intercept=0, noise_distribution='normal', noise_scale=0.1),
+    "High_Correlation": DataGenerator(
+        num_cols=1000, num_rows=1000, num_important=10, num_interaction_terms=200, effects='all', 
+        correlation_scale=0.95, correlation_distribution='uniform', 
+        intercept=0, noise_distribution='normal', noise_scale=0.1),
+    "High_Noise": DataGenerator(
+        num_cols=1000, num_rows=1000, num_important=10, num_interaction_terms=50, effects='all', 
+        correlation_scale=1, correlation_distribution='normal', 
+        intercept=0, noise_distribution='uniform', noise_scale=0.5),
+    "All Three": DataGenerator(
+        num_cols=10000, num_rows=100, num_important=10, num_interaction_terms=200, effects='all', 
+        correlation_scale=0.95, correlation_distribution='uniform', 
+        intercept=0, noise_distribution='uniform', noise_scale=0.5),
 }
 
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
 true_importances = {name: dgps[name].bucket_importances for name in dgps.keys()}
+
+datasets["Small_Avalo"] = small_input_df
+#datasets["Large_Avalo"] = large_input_df
+
+true_importances["Small_Avalo"] = {"constant": small_dataset_importances}
+#true_importances["Large_Avalo"] = large_dataset_importances
+
+print("Datasets Generated...")
 
 def model_importance(model, true_importances, importance_attr, ranked=False, **kwargs):
     return model_importance_score(model, true_importances, importance_attr, ranked=ranked)
@@ -85,20 +123,20 @@ score_functions = {
     #"loco_importance": loco_importance,
 }
 
-print("Datasets Generated...")
-
 models = {"LASSO": Lasso, "FastSparse": FastSparseSklearn}
 param_grids = {"LASSO": param_grid_lasso, "FastSparse": param_grid_fastsparse, "XGBoost": param_grid_xgb}
 importance_attrs = {"LASSO": 'coef_', "FastSparse": 'coef_', "XGBoost": 'feature_importances_'}
-n_iters= {"LASSO": 300, "FastSparse": 50, "XGBoost": 1000}
+n_iters= {"LASSO": 300, "FastSparse": 100, "XGBoost": 2000}
 
 trimming_steps = {"LASSO": Lasso, "FastSparse": FastSparseSklearn,}
+final_predictors = {"XGBoost": XGBRegressor,}
 
-final_predictors = {"XGBoost": lambda: XGBRegressor()}
+print("Parameters Initialized...")
 
 importance_testing(
     models, param_grids, datasets, true_importances, 
     score_functions=score_functions, importance_attrs=importance_attrs, 
     trimming_steps=trimming_steps, final_predictors=final_predictors,
-    n_iters=n_iters, ranked=True, save_results=False
+    n_iters=n_iters, ranked=True, 
+    save_results=True, results_folder=results_folder,
     )
