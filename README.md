@@ -1,4 +1,4 @@
-# Data-Science-Competition
+# Variable Importance
 
 This package provides a class for generating synthetic data with ground truths as well as methods for testing models and variable importance metrics on given datasets.
 
