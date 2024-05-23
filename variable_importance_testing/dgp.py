@@ -117,10 +117,10 @@ class DataGenerator:
         function to generate all interactions for a generated dataset.
 
         Parameters:
-        - cols (list or Series): List of all column indices in the dataset
-        - interacting_variables (list or Series): List of column indices within 'cols' for which to
+        - cols (list-like): List of all column indices in the dataset
+        - interacting_variables (list-like): List of column indices within 'cols' for which to
           generate specific interaction terms based on random selections of interactions.
-        - functions (list or Series of functions): List of functions to choose from when generating interactions.
+        - functions (list-like of functions): List of functions to choose from when generating interactions.
           Should have parameters n, c, i, and sign
 
         Returns:
@@ -161,11 +161,11 @@ class DataGenerator:
         to compile these into a dictionary format suitable for application across a dataset.
 
         Parameters:
-        - cols (list or Series): List of all column indices in the dataset. This list is used to randomly select columns for
+        - cols (list-like): List of all column indices in the dataset. This list is used to randomly select columns for
         generating interactions.
-        - interaction_terms (list or Series): List of column indices for which interaction terms are explicitly desired.
+        - interaction_terms (list-like): List of column indices for which interaction terms are explicitly desired.
         This list guides the focus of interaction term generation.
-        - important_variables (list or Series of int, optional): The subset of 'cols' that are actually used in calculation of target variable.
+        - important_variables (list-like of int, optional): The subset of 'cols' that are actually used in calculation of target variable.
         If not provided, defaults to using 'cols'.
         - important_samples (int, optional): Number of samples to take from the important variables for each interaction term.
         If not provided, defaults to one-fifth of the length of 'targets'.
@@ -262,7 +262,7 @@ class DataGenerator:
 
         Parameters:
         - num_rows (int): Number of rows (samples) in the generated dataset.
-        - cols (list or Series): List of column indices that will be included in the dataset.
+        - cols (list-like): List of column indices that will be included in the dataset.
         - effects (dict, optional): Dictionary where keys are column indices and values are functions
         that define how each column influences the target variable.
         - frequencies (dict, optional): Dictionary specifying the frequency (probability) of 1s for each binary column.

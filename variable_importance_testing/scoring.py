@@ -10,7 +10,7 @@ import random
 import time
 import warnings
 
-from variable_importance.pipelining import VI_Pipeline, FeatureSelector
+from variable_importance_testing.pipelining import VI_Pipeline, FeatureSelector
 
 def rank_importances(pred_importances):
     pred_linked = [(i, pred_importances[i]) for i in range(len(pred_importances))]

@@ -3,12 +3,12 @@ import pandas as pd
 from sklearn.metrics import mean_squared_error
 from xgboost import XGBRegressor
 from sklearn.linear_model import Lasso
-from variable_importance.dgp import DataGenerator
-from variable_importance.fastsparsewrap import FastSparseSklearn
-from variable_importance.scoring import importance_score, model_importance_score, importance_testing
-from variable_importance.cmr import CMR
-from variable_importance.loco import LOCOImportance
-from variable_importance.mr import MRImportance
+from variable_importance_testing.dgp import DataGenerator
+from variable_importance_testing.fastsparsewrap import FastSparseSklearn
+from variable_importance_testing.scoring import importance_score, model_importance_score, importance_testing
+from variable_importance_testing.cmr import CMR
+from variable_importance_testing.loco import LOCOImportance
+from variable_importance_testing.mr import MRImportance
 import numpy as np
 
 nrows = None
@@ -140,3 +140,5 @@ importance_testing(
     n_iters=n_iters, ranked=True, 
     save_results=True, results_folder=results_folder,
     )
+
+#way to bypass loop and give importances directly
