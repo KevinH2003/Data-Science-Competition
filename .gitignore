@@ -1,7 +1,5 @@
-TestFiles/
+test_files/
 importance_testing_results/
 __pycache__/
 variable_importance/__pycache__
 rashomonwrap.py
-Slurm Results/
-quick_test.ipynb

@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 from sklearn.metrics import mean_squared_error
+from scipy.stats import spearmanr, pearsonr
 from xgboost import XGBRegressor
 from sklearn.linear_model import Lasso
 from variable_importance_testing.dgp import DataGenerator
@@ -27,7 +28,7 @@ param_grid_fastsparse = {
     "max_support_size": [5, 10, 15],
     "atol": [1e-9, 1e-8, 1e-7, 1e-6, 1e-5],
     "lambda_0": [0.001, 0.005, 0.01, 0.05, 0.1, 0.5, 1],
-    "penalty": ["L0", "L0L2", "L0L1"],
+    "penalty": ["L0"]#, "L0L2", "L0L1"],
 }
 
 param_grid_xgb = {
@@ -90,8 +91,9 @@ dgps = {
         intercept=0, noise_distribution='uniform', noise_scale=0.5),
 }
 
+
 datasets = {name: dgp.generate_data() for name, dgp in dgps.items()}
-true_importances = {name: dgps[name].bucket_importances for name in dgps.keys()}
+true_importances = {name: dgps[name].importances for name in dgps.keys()}
 
 datasets["Small_Avalo"] = small_input_df
 #datasets["Large_Avalo"] = large_input_df
@@ -101,8 +103,14 @@ true_importances["Small_Avalo"] = {"constant": small_dataset_importances}
 
 print("Datasets Generated...")
 
-def model_importance(model, true_importances, importance_attr, ranked=False, **kwargs):
+def model_importance_top_n(model, true_importances, importance_attr, ranked=False, **kwargs):
     return model_importance_score(model, true_importances, importance_attr, ranked=ranked)
+
+def model_importance_spearmanr(model, true_importances, importance_attr, ranked=False, **kwargs):
+    return model_importance_score(model, true_importances, importance_attr, score=spearmanr, scramble=True, ranked=ranked)
+
+def model_importance_spearmanr(model, true_importances, importance_attr, ranked=False, **kwargs):
+    return model_importance_score(model, true_importances, importance_attr, score=pearsonr, ranked=ranked)
 
 def mr_importance(X, y, model, true_importances, score_func='r2', ranked=False, **kwargs):
     mr = MRImportance(X, y, score_func, model)
@@ -117,8 +125,9 @@ def loco_importance(X, y, model, true_importances, score_func='r2', cv=5, ranked
     return importance_score(loco.get_importance(), true_importances, ranked=ranked)
 
 score_functions = {
-    "model_importance": model_importance,
-    "mr_importance": mr_importance,
+    "model_importance_top_n": model_importance_top_n,
+    "model_importance_spearmanr": model_importance_spearmanr,
+    #"mr_importance": mr_importance,
     #"cmr_importance": cmr_importance,
     #"loco_importance": loco_importance,
 }
@@ -129,7 +138,7 @@ importance_attrs = {"LASSO": 'coef_', "FastSparse": 'coef_', "XGBoost": 'feature
 n_iters= {"LASSO": 300, "FastSparse": 100, "XGBoost": 2000}
 
 trimming_steps = {"LASSO": Lasso, "FastSparse": FastSparseSklearn,}
-final_predictors = {"XGBoost": XGBRegressor,}
+final_predictors = {}#{"XGBoost": XGBRegressor,}
 
 print("Parameters Initialized...")
 
@@ -138,7 +147,7 @@ importance_testing(
     score_functions=score_functions, importance_attrs=importance_attrs, 
     trimming_steps=trimming_steps, final_predictors=final_predictors,
     n_iters=n_iters, ranked=True, 
-    save_results=True, results_folder=results_folder,
+    save_results=True,
     )
 
 #way to bypass loop and give importances directly
