@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 import pandas as pd
 import random
@@ -21,19 +22,20 @@ class DataGenerator:
                  num_cols=10, 
                  num_rows=10, 
                  num_important=1, 
-                 num_interaction_terms=None, 
-                 interaction_type='all', 
+                 num_interaction_terms=0, 
+                 interactions=None, 
                  monotonic=False,
                  importance_ranking="scaled", 
                  effects=None, 
-                 frequencies={}, 
+                 effect_types="all",
+                 frequencies=None, 
                  correlation_scale=0.9, 
                  correlation_distribution='normal', 
                  target='target', 
                  intercept=0, 
                  noise_distribution='normal', 
                  noise_scale=0, 
-                 rng=None):
+                 rng_seed=None):
         """
         Initialize the DataGenerator with specified parameters.
 
@@ -42,14 +44,19 @@ class DataGenerator:
         - num_rows (int, optional): Number of rows in the dataset (default is 10).
         - num_important (int, optional): Number of important columns (default is 1).
         - num_interaction_terms (int, optional): Number of interaction terms (default is the value of num_important).
-        - interaction_type (str, optional): Type of interactions ('all' or 'linear') (default is 'all').
+        - interactions (dict-like, optional): Interaction terms and their correlations,
+            with format interactions[i] = (j, c) implying that in any given row,
+            variable i will be set to the value of variable j approximately c% of the time.
+            (negative c means variable i will be set to the opposite of variable j c% of the time)
+            (default is None)
         - monotonic (bool, optional): Whether effects are monotonic (default is False).
         - importance_ranking (str, optional): Method of importance ranking ('constant' or 'scaled') (default is 'scaled').
-        - effects (str or list-like of function, optional): Effects applied to columns 
-            must be either one of ('all', 'linear', 'constant') 
-            or a list-like structure with length equal to the number of columns
-            such that the value at every index i is the effect of variable i on the target. 
+        - effects (dict-like of function, optional): Effects applied to target, with format
+            effects[i] = f implying f(variable i) will be added to the target for every row
             (default is None)
+        - effect_types (str or list-like of function, optional): Effects to choose from
+            Types must be either one of ('all', 'linear', 'constant') or a list of functions
+            (default is 'all')
         - frequencies (dict-like, optional): Frequencies of 1s in binary columns (default is an empty dictionary).
         - correlation_scale (float): Scale of correlation for interactions (default is 0.9).
         - correlation_distribution (str, optional): Distribution type for correlations ('normal', 'uniform', 'beta') (default is 'normal').
@@ -57,19 +64,20 @@ class DataGenerator:
         - intercept (float, optional): Intercept for the target variable (default is 0).
         - noise_distribution (str, optional): Distribution type for noise ('normal', 'uniform', 'gamma') (default is 'normal').
         - noise_scale (float, optional): Scale of the noise (default is 0).
-        - rng (np.random.Generator, optional): Random number generator instance (default is None).
+        - rng_seed (float, optional): Seed for RNG (default is random seed).
         """
         
         # Record initialization params
         self.num_cols = num_cols
         self.num_rows = num_rows
         self.num_important = num_important
-        self.num_interaction_terms = num_interaction_terms if num_interaction_terms is not None else self.num_important
-        self.interaction_type = interaction_type
+        self.num_interaction_terms = num_interaction_terms
+        self.interactions = interactions if interactions is not None else {}
         self.monotonic = monotonic
         self.importance_ranking = importance_ranking
-        self.effects = effects
-        self.frequencies = frequencies
+        self.effects = effects if effects is not None else {}
+        self.effect_types = effect_types
+        self.frequencies = frequencies if frequencies is not None else {}
         self.correlation_scale = correlation_scale
         self.correlation_distribution = correlation_distribution
         self.target = target
@@ -78,41 +86,47 @@ class DataGenerator:
         self.noise_scale = noise_scale
 
         # Generate default parameters
-        self.rng = np.random.default_rng() if rng is None else rng
+        self.rng_seed = random.randint(0, sys.maxsize) if rng_seed is None else rng_seed
+        self.rng = np.random.default_rng(self.rng_seed)
         self.cols = range(num_cols)
-        self.important_variables = self.cols[:num_important]
-        self.interaction_terms = self.cols[-self.num_interaction_terms:]
-    
+
+        # set frequencies randomly if not specified
         for col in self.cols:
-            if col not in frequencies.keys():
-                frequencies[col] = self.rng.random()
-        
-        # Choose functions according to interaction type
+            if col not in self.frequencies.keys():
+                self.frequencies[col] = self.rng.random()
+
+        # Handle effects
         self.functions = DataGenerator.all_functions
-        
-        if interaction_type == 'all':
+
+        if effect_types == 'all':
             self.functions = DataGenerator.all_functions
-        elif interaction_type =='linear':
+        elif effect_types == 'linear':
             self.functions = DataGenerator.all_functions[0:1]
-        else:
-            raise ValueError("interaction_type must be either 'all' or 'linear'")
+        elif effect_types == 'constant':
+            self.functions = [lambda x, **kwargs: x]
 
-        self.interactions = self.generate_interactions()
+        self.important_variables = self.cols[:num_important]
+        generated_effects = self.random_interaction(self.important_variables, functions=self.functions)
 
-        # Check if effects is a string, if so change target functions
-        self.target_functions = DataGenerator.all_functions
+        # Include user-supplied effects
+        for variable, effect in self.effects.items():
+            generated_effects[variable] = effect
+        self.effects = generated_effects
 
-        if effects == 'all':
-            self.target_functions = DataGenerator.all_functions
-        elif effects == 'linear':
-            self.target_functions = DataGenerator.all_functions[0:1]
-        elif effects == 'constant':
-            self.effects = [(lambda x: x) if i in self.important_variables else (lambda x: 0) for i in self.cols]
-        
-        # If effects wasn't a listlike structure, generate effects according to specifications
-        if self.effects is None or type(self.effects) == str:
-            self.effects = self.random_interaction(self.important_variables, functions=self.target_functions)
+        # Re-calculate important variables based on impact
+        self.important_variables = [variable for variable, function in enumerate(self.effects) if (function(0) !=0 or function(1) != 0)]
 
+        # Handle interaction terms
+        self.interaction_terms = self.cols[-self.num_interaction_terms:]
+        generated_interactions = self.generate_interactions()
+
+        # Include manually-supplied interactions
+        for variable, interaction in self.interactions.items():
+            generated_interactions[variable] = interaction
+        self.interactions = generated_interactions
+        self.interaction_terms = [variable for variable in self.interactions] 
+
+        # Handle importance calculation
         self.bucket_importances = {}
         self.bucket_importances['constant'] = [1 if var in self.important_variables else 0 for var in self.cols]
         self.bucket_importances['scaled'] = [max(abs(self.effects[var](0)), abs(self.effects[var](1))) if var in self.important_variables else 0 for var in self.cols]
@@ -143,7 +157,7 @@ class DataGenerator:
         - monotonic (bool, optional): Whether interactions are monotonic (default is self.monotonic).
 
         Returns:
-        - pd.Series: Series of interaction effects for each column.
+        - list: List of interaction effects for each column.
         """
         # Set class values if parameters None
         cols = cols if cols is not None else self.cols
@@ -152,6 +166,7 @@ class DataGenerator:
 
         interaction_list = [lambda x: 0 for col in cols]
 
+        random.seed(self.rng_seed)
         for col in interacting_variables:
             # Generate random values
             roll = random.choice(range(len(functions)))
@@ -166,7 +181,7 @@ class DataGenerator:
 
             interaction_list[col] = f
 
-        return pd.Series(interaction_list)
+        return interaction_list
 
     def generate_interactions(self, 
                               cols=None, 
@@ -320,6 +335,7 @@ class DataGenerator:
         df = pd.DataFrame(data)
 
         # Generate interactions
+        random.seed(self.rng_seed)
         for col in interactions.keys():
             mimicking, correlation = interactions[col]
 
