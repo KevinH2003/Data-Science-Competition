@@ -279,7 +279,7 @@ print(dgp.bucket_importances)
 
 ```
 
-## Example 2: Tweaking Parameters
+### Example 2: Tweaking Parameters
 ```
 import pandas as pd
 from variable_importance_testing.dgp import DataGenerator
