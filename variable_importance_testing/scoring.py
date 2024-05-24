@@ -306,7 +306,7 @@ def importance_scores(model,
                 #print(importance, score_func)
                 #print(scores[importance + "_" + score_func + "_score"], scores["ranks"][importance][score_func])
             else:
-                scores[importance + "_" + score_func + "importance_score"] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
+                scores[importance + "_" + score_func + "_score"] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
         
         score_end_time = time.time() # End timer and record time to score
         score_elapsed_time = score_end_time - score_start_time
