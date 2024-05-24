@@ -55,8 +55,9 @@ param_grid_xgb_pipeline = {
     'prediction__reg_alpha': [0, 0.1, 0.5, 1], 
 }
 
-###DGPs###
+###DATA###
 
+# Import outside dataset
 small_input_df = pd.read_table('test_files/small_dataset/Input.txt', header=None, low_memory=False, nrows=nrows)
 small_pheno_df = pd.read_table('test_files/small_dataset/Pheno.txt', header=None, nrows=nrows).drop(columns=0, axis=1).reset_index(drop=True)
 small_test_SNP_metadata_df = pd.read_csv('test_files/small_dataset/Test.SNP.metadata.csv')
@@ -64,6 +65,7 @@ small_test_SNP_metadata_df = pd.read_csv('test_files/small_dataset/Test.SNP.meta
 small_input_df['target'] = small_pheno_df.iloc[:, 0]
 small_dataset_importances = small_test_SNP_metadata_df["EffectSize"]
 
+# DGPs
 dgps = {
     "Toy": DataGenerator(
         num_cols=100, num_rows=100, num_important=10, 
@@ -103,13 +105,14 @@ true_importances["Small_Avalo"] = {"constant": small_dataset_importances}
 
 print("Datasets Generated...")
 
+# Scoring methods
 def model_importance_top_n(model, true_importances, importance_attr, ranked=False, **kwargs):
     return model_importance_score(model, true_importances, importance_attr, ranked=ranked)
 
 def model_importance_spearmanr(model, true_importances, importance_attr, ranked=False, **kwargs):
     return model_importance_score(model, true_importances, importance_attr, score=spearmanr, scramble=True, ranked=ranked)
 
-def model_importance_spearmanr(model, true_importances, importance_attr, ranked=False, **kwargs):
+def model_importance_pearsonr(model, true_importances, importance_attr, ranked=False, **kwargs):
     return model_importance_score(model, true_importances, importance_attr, score=pearsonr, ranked=ranked)
 
 def mr_importance(X, y, model, true_importances, score_func='r2', ranked=False, **kwargs):
@@ -127,18 +130,20 @@ def loco_importance(X, y, model, true_importances, score_func='r2', cv=5, ranked
 score_functions = {
     "model_importance_top_n": model_importance_top_n,
     "model_importance_spearmanr": model_importance_spearmanr,
+    "model_importance_pearsonr": model_importance_pearsonr,
     #"mr_importance": mr_importance,
     #"cmr_importance": cmr_importance,
     #"loco_importance": loco_importance,
 }
 
+# Set up testing loop
 models = {"LASSO": Lasso, "FastSparse": FastSparseSklearn}
 param_grids = {"LASSO": param_grid_lasso, "FastSparse": param_grid_fastsparse, "XGBoost": param_grid_xgb}
 importance_attrs = {"LASSO": 'coef_', "FastSparse": 'coef_', "XGBoost": 'feature_importances_'}
 n_iters= {"LASSO": 300, "FastSparse": 100, "XGBoost": 2000}
 
 trimming_steps = {"LASSO": Lasso, "FastSparse": FastSparseSklearn,}
-final_predictors = {}#{"XGBoost": XGBRegressor,}
+final_predictors = {"XGBoost": XGBRegressor,}
 
 print("Parameters Initialized...")
 
