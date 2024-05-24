@@ -438,6 +438,7 @@ def importance_testing(models,
     for trimming_step in trimming_steps:
         if trimming_step not in model_names:
             model_names.append(trimming_step)
+            models[trimming_step] = trimming_steps[trimming_step]
 
     # Prepare parameter grids, importance attributes, and n_iter fors final predictors (for pipelining)
     for predictor_name in final_predictors:
@@ -473,8 +474,11 @@ def importance_testing(models,
 
     for name, dataset in datasets.items():
         print(f"\n***###{name}:###***")
-        X = dataset.drop(["target"], axis=1)
-        y = dataset["target"]
+        if not isinstance(dataset, pd.DataFrame):
+            dataset = pd.DataFrame(dataset)
+            
+        X = dataset.iloc[:, :-1]
+        y = dataset.iloc[:, -1]
 
         model_scores = {}
         model_queue = deque([(model_name, models[model_name]()) for model_name in model_names])
