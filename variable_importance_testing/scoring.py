@@ -1,5 +1,6 @@
 from collections import deque
 from datetime import datetime
+import inspect
 import os
 import numpy as np
 import pandas as pd
@@ -217,13 +218,13 @@ def importance_scores(model,
         and optional cross-validation results and importance rankings.
     """
     
-    score_functions = score_functions if score_functions is not None else {"model importance": model_importance_score}
+    score_functions = score_functions if score_functions is not None else {"model_top_n": model_importance_score}
     
     # Handle if single true_importance or single score_function
     if isinstance(true_importances, list):
-        true_importances = {"standard": true_importances}
+        true_importances = {"": true_importances}
     if callable(score_functions):
-        score_functions = {"standard": score_functions}
+        score_functions = {"standard_scoring": score_functions}
 
     scores = {}
     scores["times"] = {}
@@ -253,8 +254,8 @@ def importance_scores(model,
             scores['training_r2'] = None
             scores['test_r2'] = None
             for importance in true_importances:
-                for score_func in score_functions:
-                    scores[importance + "_" + score_func + "importance_score"] = None
+                for func_name in score_functions:
+                    scores[importance + "_" + func_name + "importance_score"] = None
 
             failed = True
         finally:
@@ -294,26 +295,39 @@ def importance_scores(model,
             scores["ranks"][importance] = {}
 
     # Perform every scoring function on every ground truth
-    for score_func in score_functions:
+    for func_name in score_functions:
         if verbose:
-            print(f"Starting {score_func} Scoring...")
+            print(f"Starting {func_name} Scoring...")
             
         score_start_time = time.time() # Start timer
         for importance in true_importances:
+
+            # Filter the kwargs to only include those valid for the function
+            kwargs = {
+                "model":best_model, 
+                "X": X_train, 
+                "y": y_train, 
+                "true_importances": true_importances[importance], 
+                "importance_attr": importance_attr, 
+                "ranked": ranked,
+            }
+
+            sig = inspect.signature(score_functions[func_name])
+            valid_params = sig.parameters
+            filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_params}
+
             #note: maybe change this so it can accept all true importances at once to save time
             if ranked:
-                scores[importance + "_" + score_func + "_score"], scores["ranks"][importance][score_func] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
-                #print(importance, score_func)
-                #print(scores[importance + "_" + score_func + "_score"], scores["ranks"][importance][score_func])
+                scores[importance + "_" + func_name + "_score"], scores["ranks"][importance][func_name] = score_functions[func_name](**filtered_kwargs)
             else:
-                scores[importance + "_" + score_func + "_score"] = score_functions[score_func](model=best_model, X=X_train, y=y_train, true_importances=true_importances[importance], importance_attr=importance_attr, ranked=ranked)
+                scores[importance + "_" + func_name + "_score"] = score_functions[func_name](**filtered_kwargs)
         
         score_end_time = time.time() # End timer and record time to score
         score_elapsed_time = score_end_time - score_start_time
-        scores["times"][score_func] = time.strftime("%H:%M:%S", time.gmtime(score_elapsed_time))
+        scores["times"][func_name] = time.strftime("%H:%M:%S", time.gmtime(score_elapsed_time))
 
         if verbose:
-            print(f"Finished Scoring in {scores['times'][score_func]}")
+            print(f"Finished Scoring in {scores['times'][func_name]}")
 
     # Print results if verbose
     if verbose:
@@ -324,9 +338,9 @@ def importance_scores(model,
         print(f"Test R^2 Score: {scores['test_r2']}")
 
         for importance in true_importances:
-            for score_func in score_functions:
-                score = scores[importance + "_" + score_func + "_score"]
-                print(f"{importance}_{score_func} Score: {score}")
+            for func_name in score_functions:
+                score = scores[importance + "_" + func_name + "_score"]
+                print(f"{importance}_{func_name} Score: {score}")
 
     return scores
 
